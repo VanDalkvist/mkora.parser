@@ -13,5 +13,9 @@
   },
   "scripts": {
     "test": "mocha app --timeout 15000"
-  }
+  },
+  "license": "MIT",
+  "author": "VanDalkvist",
+  "description": "Parser of mkora site",
+  "repository": "https://github.com/VanDalkvist/mkora.parser"
 }
