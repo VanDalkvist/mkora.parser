@@ -2,6 +2,7 @@
   "name": "mkora-parser",
   "version": "0.0.1",
   "dependencies": {
+    "chai": "^3.5.0",
     "cheerio": "^0.20.0",
     "lodash": "^4.3.0",
     "q": "^1.4.1",
@@ -9,5 +10,8 @@
     "should": "^8.2.2",
     "superagent": "^1.7.2",
     "supertest": "^1.1.0"
+  },
+  "scripts": {
+    "test": "mocha app --timeout 15000"
   }
 }
