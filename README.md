@@ -1,1 +1,1 @@
-# parser for mkora shop
+# Parser for mkora shop
