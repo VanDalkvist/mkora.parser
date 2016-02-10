@@ -2,6 +2,12 @@
   "name": "mkora-parser",
   "version": "0.0.1",
   "dependencies": {
-    "cheerio": "^0.20.0"
+    "cheerio": "^0.20.0",
+    "lodash": "^4.3.0",
+    "q": "^1.4.1",
+    "request": "^2.69.0",
+    "should": "^8.2.2",
+    "superagent": "^1.7.2",
+    "supertest": "^1.1.0"
   }
 }
