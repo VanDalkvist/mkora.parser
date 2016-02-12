@@ -1,2 +1,1 @@
-npm i
-npm i mocha -g
+npm i && npm i mocha -g
