@@ -7,7 +7,7 @@ var should = chai.should();
 var expect = chai.expect;
 
 //var _ = require('lodash');
-var Q = require('q');
+//var Q = require('q');
 
 var config = require('../settings/config.json');
 
@@ -16,13 +16,31 @@ console.log('Site to parse: ', site);
 
 var request = superTest(site);
 
-var cheerio = require('cheerio');
+var mainPageParser = require('../modules/parsers/main-page.parser');
 
 describe('main site checking', function () {
 
-    var htmlPage, $;
+    var $, fileContent;
+
+    before('read file if exist', function (done) {
+        var fs = require('fs');
+        fs.readFile(config.file, 'utf8', function (err, data) {
+            if (err) {
+                console.log("File does not exist.");
+            }
+
+            fileContent = data;
+            done();
+        });
+    });
 
     it('respond with whole page', function (done) {
+        if (fileContent) {
+            $ = mainPageParser.parse(fileContent);
+            return done();
+        }
+
+        console.log("Main html file does not exist. Need to download.");
         request
             .get('/')
             .set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
@@ -30,21 +48,28 @@ describe('main site checking', function () {
             .set('Accept-Language', 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4,es;q=0.2')
             .expect(200)
             .end(function (err, res) {
-                htmlPage = res.text;
                 if (err) return done(err);
-                done();
+
+                var fs = require('fs');
+                fs.writeFile(config.file, res.text, function (err, data) {
+                    if (err) {
+                        return done(err);
+                    }
+
+                    $ = mainPageParser.parse(res.text);
+
+                    assert.notEqual($, null);
+                    assert.notEqual($, undefined);
+
+                    if (err) return done(err);
+                    done();
+                });
             });
     });
 
     it('html should successfully parsed as cheerio object', function (done) {
 
-        $ = cheerio.load(htmlPage);
-
-        assert.notEqual($, null);
-        assert.notEqual($, undefined);
-
-        //expect($('#main').html()).to.exist;
-
+        expect($('ul.accordion').html()).to.exist;
 
         //var $main = $('main .content').html();
         //

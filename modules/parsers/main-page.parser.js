@@ -1,5 +1,7 @@
 // dependencies
 
+var cheerio = require('cheerio');
+
 // exports
 
 module.exports = {
@@ -10,6 +12,6 @@ module.exports = {
 
 // private methods
 
-function _parse(url) {
-
+function _parse(htmlPage) {
+    return cheerio.load(htmlPage);
 }
