@@ -41,6 +41,7 @@ describe('main site checking', function () {
         }
 
         console.log("Main html file does not exist. Need to download.");
+
         request
             .get('/')
             .set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
@@ -52,16 +53,13 @@ describe('main site checking', function () {
 
                 var fs = require('fs');
                 fs.writeFile(config.file, res.text, function (err, data) {
-                    if (err) {
-                        return done(err);
-                    }
+                    if (err) return done(err);
 
                     $ = mainPageParser.parse(res.text);
 
                     assert.notEqual($, null);
                     assert.notEqual($, undefined);
 
-                    if (err) return done(err);
                     done();
                 });
             });
