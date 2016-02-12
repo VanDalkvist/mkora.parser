@@ -119,6 +119,7 @@ describe('Parsing site... ', function () {
         categoryPagesPromise = Q.all(toGrabPromises).then(function (res) {
             console.log('good!');
             done();
+            return res;
         }, function (err) {
             done(err);
         }).catch(function (err) {
