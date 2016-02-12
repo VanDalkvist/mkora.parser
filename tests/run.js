@@ -42,11 +42,7 @@ describe('main site checking', function () {
 
         console.log("Main html file does not exist. Need to download.");
 
-        request
-            .get('/')
-            .set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
-            .set('Accept-Encoding', 'gzip, deflate, sdch')
-            .set('Accept-Language', 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4,es;q=0.2')
+        _prepareRequest(request.get('/'))
             .expect(200)
             .end(function (err, res) {
                 if (err) return done(err);
@@ -69,24 +65,10 @@ describe('main site checking', function () {
 
         expect($('ul.accordion').html()).to.exist;
 
-        //var $main = $('main .content').html();
-        //
-        //expect($main).to.exist;
-        //
-        //expect($main).not.to.be.undefined;
-        //expect($main).not.to.be.null;
-
-        //assert.notEqual($main.length, 0);
-
         done();
     });
 
     it('should parse kora categories', function () {
-        //var categoryLinks = $('.dcjq-parent-li ul .dcjq-parent-li a.dcjq-parent');
-
-        //console.log($('.dcjq-parent-li ul .dcjq-parent-li').html());
-        //console.log($('.dcjq-parent-li ul').html());
-        //console.log($('.dcjq-parent-li').html());
 
         var categories = $('ul.accordion li a');
 
@@ -105,5 +87,14 @@ describe('main site checking', function () {
         console.log('Kora categories - ', hrefs);
         assert.isAbove(hrefs.length, 3);
     });
+
+    // private functions
+
+    function _prepareRequest(request) {
+        return request
+            .set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
+            .set('Accept-Encoding', 'gzip, deflate, sdch')
+            .set('Accept-Language', 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4,es;q=0.2');
+    }
 
 });
