@@ -4,6 +4,7 @@ var _ = require('lodash');
 var Q = require('q');
 var fs = require('fs');
 var cheerio = require('cheerio');
+var entities = require("entities");
 
 var assert = chai.assert;
 var should = chai.should();
@@ -208,7 +209,6 @@ describe('Parsing site... ', function () {
         });
 
         Q.each(categoriesHashWithProductsPromise).then(function (res) {
-
             done();
         }, function (err) {
             done(err);
@@ -220,6 +220,7 @@ describe('Parsing site... ', function () {
     var timer = 0;
     var productCounter = 0;
     var defaultTimeout = 6000;
+    var loadedProducts;
 
     it("Load all products", function (allDone) {
 
@@ -237,7 +238,7 @@ describe('Parsing site... ', function () {
                     productCounter++;
 
                     return _readOrDownloadAndWrite(fileName, product.href, function (data) {
-                        return {ref: product.href, page: data};
+                        return {title: product.title, ref: product.href, page: data};
                     });
                 });
 
@@ -250,12 +251,149 @@ describe('Parsing site... ', function () {
 
         Q.each(all).then(function (res) {
             allDone();
+            loadedProducts = res;
         }, function (err) {
             allDone(err);
         }).catch(function (err) {
             allDone(err);
         });
 
+    });
+
+    var categoriesToParse = ['kosmetika-kora'];
+
+    var categoryBrands = {
+        'kosmetika-kora': 'Kora',
+        'new-line-prof-linija': 'New Line',
+        'new-line-domashnij-uhod': 'New Line',
+        'sante_qj': 'New Line',
+        'izrailskaja-kosmetika': 'Health & Beauty'
+    };
+
+    var detailsPatterns = {
+        composition: 'Активные ингредиенты',
+        action: 'Действие',
+        application: 'Применение',
+        result: 'Результат',
+        contraindications: 'Противопоказания',
+        course: 'Курс'
+    };
+
+    var skinTypesMappings = {
+        "Средства Anti-Aging": "Противовозрастные средства",
+        "Для чувствительная кожи": "Для чувствительной кожи"
+    };
+
+    it('parse products', function (done) {
+        var productsHash = {};
+
+        _.each(categoriesToParse, function (catName) {
+            _.each(loadedProducts[catName], function (subCat) {
+                _.each(subCat, function (product, id) {
+                    if (!product.page) return;
+                    if (productsHash[id]) return;
+
+                    productsHash[id] = product;
+
+                    productsHash[id].brand = categoryBrands[catName];
+                });
+            });
+        });
+
+        _.each(productsHash, function (product) {
+            var $ = cheerio.load(product.page);
+
+            var $product = $('article[itemscope][itemtype="http://schema.org/Product"]');
+
+            expect($product.html()).to.exist;
+
+            var $gallery = $('#overview.product-info .product-gallery');
+
+            expect($gallery.html()).to.exist;
+
+            var $image = $('#product-core-image a[href]');
+
+            product.img = $image.attr('href');
+
+            var $price = $('.add2cart span.price[data-price]');
+
+            product.price = parseInt($price.attr('data-price'));
+
+            var $description = $('#product-description');
+            expect($description.html()).to.exist;
+
+            var $shortDescription = $('#product-description .hideWrap p').first();
+
+            product.description = _.trim($shortDescription.text());
+
+            var detailsHtml = entities.decodeHTML($('#product-description .hideCont').html());
+
+            var details = _.split(detailsHtml, '<br><br>');
+
+            var prevDetail = {
+                type: '',
+                text: ''
+            };
+
+            _.each(details, function (detail) {
+                if (detail.indexOf('id="product-features"') > -1) return;
+
+                var foundPattern = _.findKey(detailsPatterns, function (pattern) {
+                    return detail.indexOf(pattern) > -1;
+                });
+
+                if (!foundPattern) {
+                    if (!prevDetail.type) {
+                        product.description += _.trim(detail);
+                        return;
+                    }
+
+                    product[prevDetail.type] = (product[prevDetail.type] || '') + detail;
+                    return;
+                }
+
+                var strongReplacePattern = '<strong>(\s*)' + detailsPatterns[foundPattern] + '(:|.)?(\s*)<\/strong>(:|.)?';
+                var bReplacePattern = '<b>(\s*)' + detailsPatterns[foundPattern] + '(:|.)?(\s*)<\/b>(:|.)?';
+                var clearDetail = _.replace(detail, new RegExp(strongReplacePattern, 'g'), '');
+
+                clearDetail = _.replace(clearDetail, new RegExp(bReplacePattern, 'g'), '');
+
+                product[foundPattern] = (product[foundPattern] || '') + clearDetail;
+
+                prevDetail.type = foundPattern;
+            });
+
+            _.each(detailsPatterns, function (name, pattern) {
+                if (!product[pattern]) return;
+
+                product[pattern] = _.trim(cheerio.load(product[pattern]).root().text());
+            });
+
+            var skinText = $('#product-features tr td[itemprop="tip_kozhi"]').text();
+
+            product.skin = _.map(_.filter(_.split(skinText, ',')), function (skinType) {
+                var type = _.trim(skinType);
+                if (skinTypesMappings[type]) {
+                    return skinTypesMappings[type];
+                }
+                return type;
+            });
+
+            product.volume = _.trim($('#product-features tr td[itemprop="obem"]').text());
+
+            if (!product.volume) {
+                product.volume = _.trim($('#product-features tr td[itemprop="obem_1"]').text());
+            }
+
+            product.country = _.trim($('#product-features tr td[itemprop="strana_proizvoditel_"]').text());
+
+            // todo:
+            delete product.page;
+        });
+
+        _writeFile('dist/json/products.json', JSON.stringify(productsHash));
+
+        done();
     });
 
     // private functions
@@ -314,10 +452,10 @@ describe('Parsing site... ', function () {
 
     function _readOrDownloadAndWrite(fileName, ref, mapper) {
         return _readFile(fileName).then(function (data) {
-            console.log('File is already exist.', fileName);
+            //console.log('File is already exist.', fileName);
             --productCounter;
-            console.log('Left products: ', productCounter);
-            console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+            //console.log('Left products: ', productCounter);
+            //console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
 
             return mapper ? mapper(data) : data;
         }, function () {
