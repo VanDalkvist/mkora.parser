@@ -18,22 +18,6 @@ var request = superTest(site);
 
 var mainPageParser = require('../modules/parsers/main-page.parser');
 
-Q.each = function (subject, prop) {
-    if (!_.isObject(subject))
-        throw new Error("Argument should be an object in the context.");
-
-    var keys = _.keys(subject);
-
-    return Q.spread(_.values(subject), function () {
-        var args = arguments;
-        if (_.isString(prop) || _.isFunction(prop)) {
-            args = _.map(args, prop);
-        }
-
-        return _.zipObject(keys, args);
-    });
-};
-
 describe('Parsing site... ', function () {
 
     var $, context = {fileContent: null};
@@ -252,7 +236,7 @@ describe('Parsing site... ', function () {
 
                     productCounter++;
 
-                    return _readOrWriteAndResolve(fileName, _getRequestPromise.bind(null, product.href), function (data) {
+                    return _readOrDownloadAndWrite(fileName, product.href, function (data) {
                         return {ref: product.href, page: data};
                     });
                 });
@@ -322,13 +306,13 @@ describe('Parsing site... ', function () {
         return Q.all(cat.sub.map(function _mapCategoryLink(subCategoryRef) {
             var name = subCategoryRef.replace(/\//g, '_');
             var fileName = 'dist/categories/' + cat.code + '/' + name + '.html';
-            return _readOrWriteAndResolve(fileName, _getRequestPromise.bind(null, subCategoryRef), function (data) {
+            return _readOrDownloadAndWrite(fileName, subCategoryRef, function (data) {
                 return {ref: subCategoryRef, page: data};
             });
         }));
     }
 
-    function _readOrWriteAndResolve(fileName, getRequestPromise, mapper) {
+    function _readOrDownloadAndWrite(fileName, ref, mapper) {
         return _readFile(fileName).then(function (data) {
             console.log('File is already exist.', fileName);
             --productCounter;
@@ -337,7 +321,9 @@ describe('Parsing site... ', function () {
 
             return mapper ? mapper(data) : data;
         }, function () {
-            return getRequestPromise().then(function (content) {
+            console.log('Warning!!!');
+            return mapper ? mapper(null) : null;
+            return _getRequestPromise(ref).then(function (content) {
                 return _writeFile(fileName, content).then(function () {
                     console.log('File was written. ', fileName);
 
