@@ -18,6 +18,22 @@ var request = superTest(site);
 
 var mainPageParser = require('../modules/parsers/main-page.parser');
 
+Q.each = function (subject, prop) {
+    if (!_.isObject(subject))
+        throw new Error("Argument should be an object in the context.");
+
+    var keys = _.keys(subject);
+
+    return Q.spread(_.values(subject), function () {
+        var args = arguments;
+        if (_.isString(prop) || _.isFunction(prop)) {
+            args = _.map(args, prop);
+        }
+
+        return _.zipObject(keys, args);
+    });
+};
+
 describe('Parsing site... ', function () {
 
     var $, context = {fileContent: null};
@@ -98,28 +114,42 @@ describe('Parsing site... ', function () {
         'izrailskaja-kosmetika'
     ];
 
+    var categoriesHash = {};
+
     _.each(categoryCodes, function (code) {
         it('should parse "' + code + '" categories links', function () {
             var categoryRef = '/' + code + '/';
 
             var filtered = _filterCategories(categories, categoryRef);
             categoriesToGrab.push({categories: filtered, ref: categoryRef, code: code});
+
+            categoriesHash[code] = {
+                code: code,
+                ref: categoryRef,
+                sub: filtered
+            };
         });
     });
 
     var categoryPagesPromise;
 
     it('should load all categories page', function (done) {
-        var toGrabPromises = categoriesToGrab.map(function (cat) {
+
+        var toGrabPromises = _.mapValues(categoriesHash, function (cat) {
             return _makeDir('dist/categories/' + cat.code).then(function () {
-                return _mapCategory(cat);
+                return Q.each({
+                    code: cat.code,
+                    ref: cat.ref,
+                    sub: cat.sub,
+                    pages: _mapCategory(cat)
+                });
             });
         }, []);
 
-        categoryPagesPromise = Q.all(toGrabPromises).then(function (res) {
+        categoryPagesPromise = Q.each(toGrabPromises).then(function (res) {
             console.log('good!');
             done();
-            return res;
+            categoriesHash = res;
         }, function (err) {
             done(err);
         }).catch(function (err) {
@@ -127,46 +157,121 @@ describe('Parsing site... ', function () {
         });
     });
 
+
     it('should parse products', function (done) {
-        categoryPagesPromise.then(function (rootCategories) {
-            var compiled = _.map(rootCategories.map(function (categories) {
-                return Q.all(categories.map(function (category) {
-                    var breadcrumbs = _.filter(category.ref.split('/'));
-                    var promise = breadcrumbs.reduce(function (prev, name) {
-                        return prev.then(function (prevName) {
-                            return _makeDir('dist/products/' + prevName + '/' + name).then(function () {
-                                return prevName + '/' + name;
-                            });
-                        });
-                    }, Q.when(''));
 
-                    return promise.then(function () {
-                        var $ = cheerio.load(category.page);
+        var categoriesHashWithProductsPromise = _.mapValues(categoriesHash, function (cat) {
 
-                        var productsList = $('#product-list .products-list').html();
-
-                        var isEmpty = _.isEmpty(productsList);
-                        //
-
-                        if (isEmpty) {
-                            console.log(category.ref + " - category is empty. Skipping... ");
-                            return { ref: category.ref, products: [] };
-                        }
-
-                        expect($('#product-list .products-list ul')).to.have.length(1);
-                        expect($('#product-list .products-list ul li')).not.to.be.empty;
+            var breadcrumbs = _.filter(cat.ref.split('/'));
+            var promise = breadcrumbs.reduce(function (prev, name) {
+                return prev.then(function (prevName) {
+                    return _makeDir('dist/products/' + prevName + '/' + name).then(function () {
+                        return prevName + '/' + name;
                     });
-                }));
-            }));
+                });
+            }, Q.when(''));
 
-            Q.all(compiled).then(function (res) {
-                done();
-            }, function (err) {
-                done(err);
-            }).catch(function (err) {
-                done(err);
+            return promise.then(function () {
+
+                var subCategoriesHash = _.keyBy(cat.pages, function (page) {
+                    return _createCodeFromUrl(page.ref, page);
+                });
+
+                var subCatWithProductsHash = _.mapValues(subCategoriesHash, function (subCat) {
+                    var $ = cheerio.load(subCat.page);
+
+                    var productsList = $('#product-list .products-list').html();
+
+                    var isEmpty = _.isEmpty(productsList);
+
+                    if (isEmpty) {
+                        console.log(subCat.ref + " - category is empty. Skipping... ");
+                        return {categoryRef: subCat.ref, products: {}};
+                    }
+
+                    expect($('#product-list .products-list ul')).to.have.length(1);
+                    expect($('#product-list .products-list ul li')).not.to.be.empty;
+
+                    expect($('#product-list .products-list ul li[itemscope][itemtype="http://schema.org/Product"]')).not.to.be.empty;
+
+                    var $products = $('#product-list .products-list ul li[itemscope][itemtype="http://schema.org/Product"] .photo a[title]');
+
+                    expect($products).not.to.be.empty;
+
+                    var productsArray = $products.map(function (i, product) {
+                        var $product = $(product);
+                        return {
+                            title: $product.attr('title'),
+                            href: $product.attr('href')
+                        };
+                    }).toArray();
+
+                    var productsHash = _.keyBy(productsArray, function (product) {
+                        return _createCodeFromUrl(product.href, product);
+                    });
+
+                    return _.extend(subCat, {
+                        products: productsArray,
+                        productsHash: productsHash
+                    });
+                });
+
+                return Q.each(_.extend(cat, {
+                    subCategoriesHash: subCatWithProductsHash
+                }));
             });
+
         });
+
+        Q.each(categoriesHashWithProductsPromise).then(function (res) {
+
+            done();
+        }, function (err) {
+            done(err);
+        }).catch(function (err) {
+            done(err);
+        });
+    });
+
+    var timer = 0;
+    var productCounter = 0;
+    var defaultTimeout = 6000;
+
+    it("Load all products", function (allDone) {
+
+        var all = _.mapValues(categoriesHash, function (cat) {
+            console.log("should load all products for '" + cat.code + "' and save to file system if not exist");
+
+            return Q.each(_.mapValues(cat.subCategoriesHash, function (subCat, subCode) {
+                console.log("should load all products for sub category '" + subCode + "'");
+
+                var productsHashForLoad = _.mapValues(subCat.productsHash, function (product, code) {
+                    var codeParts = _(code).split('.').filter();
+                    var name = codeParts.last();
+                    var fileName = 'dist/products/' + codeParts.dropRight().join('/') + '/' + name + '.html';
+
+                    productCounter++;
+
+                    return _readOrWriteAndResolve(fileName, _getRequestPromise.bind(null, product.href), function (data) {
+                        return {ref: product.href, page: data};
+                    });
+                });
+
+                return Q.each(productsHashForLoad);
+            }));
+        });
+
+        console.log('Count of products: ', productCounter);
+        console.log('Loading will take ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+
+        Q.each(all).then(function (res) {
+            allDone();
+        }, function (err) {
+            allDone(err);
+        }).catch(function (err) {
+            allDone(err);
+        });
+
     });
 
     // private functions
@@ -213,39 +318,43 @@ describe('Parsing site... ', function () {
     }
 
     function _mapCategory(cat) {
-        console.log("'" + cat.ref + "' category pages to grab: ", cat.categories.length);
-        return Q.all(cat.categories.map(function _mapCategoryLink(categoryRef) {
-            var deferred = Q.defer();
-
-            _prepareRequest(request.get(categoryRef))
-                .expect(200)
-                .end(function (err, res) {
-                    if (err) return deferred.reject(err);
-
-                    var name = categoryRef.replace(/\//g, '_');
-                    var fileName = 'dist/categories/' + cat.code + '/' + name + '.html';
-                    _readOrWriteAndResolve(fileName, res.text, deferred, function (data) {
-                        return {code: cat.code, ref: categoryRef, page: data};
-                    });
-                });
-
-            return deferred.promise;
+        console.log("'" + cat.ref + "' category pages to grab: ", cat.sub.length);
+        return Q.all(cat.sub.map(function _mapCategoryLink(subCategoryRef) {
+            var name = subCategoryRef.replace(/\//g, '_');
+            var fileName = 'dist/categories/' + cat.code + '/' + name + '.html';
+            return _readOrWriteAndResolve(fileName, _getRequestPromise.bind(null, subCategoryRef), function (data) {
+                return {ref: subCategoryRef, page: data};
+            });
         }));
     }
 
-    function _readOrWriteAndResolve(fileName, content, deferred, mapper) {
+    function _readOrWriteAndResolve(fileName, getRequestPromise, mapper) {
         return _readFile(fileName).then(function (data) {
-            return deferred.resolve(mapper ? mapper(data) : data);
+            console.log('File is already exist.', fileName);
+            --productCounter;
+            console.log('Left products: ', productCounter);
+            console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+
+            return mapper ? mapper(data) : data;
         }, function () {
-            return _writeFile(fileName, content).then(function () {
-                console.log('File was written. ', fileName);
-                deferred.resolve(mapper ? mapper(content) : content);
-            }, function (err) {
-                console.log('Error during writing... ', err);
-                deferred.reject(err);
-            }).catch(function (err) {
-                console.log('Unhandled error: ', err);
-                deferred.reject(err);
+            return getRequestPromise().then(function (content) {
+                return _writeFile(fileName, content).then(function () {
+                    console.log('File was written. ', fileName);
+
+                    --productCounter;
+                    console.log('Left products: ', productCounter);
+                    console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+
+                    return mapper ? mapper(content) : content;
+                }, function (err) {
+                    console.log('Error during writing... ', err);
+
+                    --productCounter;
+                    console.log('Left products: ', productCounter);
+                    console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+
+                    return mapper ? mapper(content) : content;
+                });
             });
         });
     }
@@ -260,6 +369,39 @@ describe('Parsing site... ', function () {
             if (e.code != 'EEXIST') return deferred.reject(e);
             deferred.resolve();
         }
+
+        return deferred.promise;
+    }
+
+    function _createCodeFromUrl(url, obj) {
+        var refParts = _.filter(_.split(url, '/'));
+
+        obj.breadcrumbs = _.mapValues(_.keyBy(refParts), function (part) {
+            return {name: part};
+        });
+
+        var code = _.join(refParts, '.');
+        return code;
+    }
+
+    function _getRequestPromise(ref) {
+        var deferred = Q.defer();
+
+        setTimeout(function () {
+            _prepareRequest(request.get(ref))
+                .expect(200)
+                .end(function (err, res) {
+                    if (err) {
+                        console.log("failed loading '" + ref + "' ..... ");
+                        return deferred.reject(err);
+                    }
+
+                    console.log("loaded '" + ref + "' ");
+                    deferred.resolve(res.text);
+                });
+        }, timer);
+
+        timer += defaultTimeout;
 
         return deferred.promise;
     }
