@@ -127,6 +127,48 @@ describe('Parsing site... ', function () {
         });
     });
 
+    it('should parse products', function (done) {
+        categoryPagesPromise.then(function (rootCategories) {
+            var compiled = _.map(rootCategories.map(function (categories) {
+                return Q.all(categories.map(function (category) {
+                    var breadcrumbs = _.filter(category.ref.split('/'));
+                    var promise = breadcrumbs.reduce(function (prev, name) {
+                        return prev.then(function (prevName) {
+                            return _makeDir('dist/products/' + prevName + '/' + name).then(function () {
+                                return prevName + '/' + name;
+                            });
+                        });
+                    }, Q.when(''));
+
+                    return promise.then(function () {
+                        var $ = cheerio.load(category.page);
+
+                        var productsList = $('#product-list .products-list').html();
+
+                        var isEmpty = _.isEmpty(productsList);
+                        //
+
+                        if (isEmpty) {
+                            console.log(category.ref + " - category is empty. Skipping... ");
+                            return { ref: category.ref, products: [] };
+                        }
+
+                        expect($('#product-list .products-list ul')).to.have.length(1);
+                        expect($('#product-list .products-list ul li')).not.to.be.empty;
+                    });
+                }));
+            }));
+
+            Q.all(compiled).then(function (res) {
+                done();
+            }, function (err) {
+                done(err);
+            }).catch(function (err) {
+                done(err);
+            });
+        });
+    });
+
     // private functions
 
     function _prepareRequest(request) {
