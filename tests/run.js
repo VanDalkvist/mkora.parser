@@ -166,6 +166,7 @@ describe('Parsing site... ', function () {
                     var $ = cheerio.load(subCat.page);
 
                     var productsList = $('#product-list .products-list').html();
+                    var $categoryName = $('h1.category-name');
 
                     var isEmpty = _.isEmpty(productsList);
 
@@ -185,6 +186,7 @@ describe('Parsing site... ', function () {
 
                     var productsArray = $products.map(function (i, product) {
                         var $product = $(product);
+
                         return {
                             title: $product.attr('title'),
                             href: $product.attr('href')
@@ -196,6 +198,7 @@ describe('Parsing site... ', function () {
                     });
 
                     return _.extend(subCat, {
+                        title: _.trim($categoryName.text()),
                         products: productsArray,
                         productsHash: productsHash
                     });
@@ -230,6 +233,10 @@ describe('Parsing site... ', function () {
             return Q.each(_.mapValues(cat.subCategoriesHash, function (subCat, subCode) {
                 console.log("should load all products for sub category '" + subCode + "'");
 
+                var productCategories = _.map(subCat.breadcrumbs, function (crumb) {
+                    return crumb.name;
+                });
+
                 var productsHashForLoad = _.mapValues(subCat.productsHash, function (product, code) {
                     var codeParts = _(code).split('.').filter();
                     var name = codeParts.last();
@@ -238,13 +245,31 @@ describe('Parsing site... ', function () {
                     productCounter++;
 
                     return _readOrDownloadAndWrite(fileName, product.href, function (data) {
-                        return {title: product.title, ref: product.href, page: data};
+                        return {title: product.title, ref: product.href, page: data, code: name, categoryCodes: productCategories};
                     });
                 });
 
                 return Q.each(productsHashForLoad);
             }));
         });
+
+        var catToSave = _.mapValues(categoriesHash, function (cat) {
+            var catObj = {};
+            _.each(cat.subCategoriesHash, function (subCat, key) {
+                catObj[key] = subCat.title;
+            });
+            return catObj;
+        });
+
+        function _separate(key) {
+            var separated = _.split(key, '.');
+            if (separated.length == 2) {
+                return separated[1];
+            }
+            return _separate(_.join(_.drop(separated), '.'));
+        }
+
+        _writeFile('dist/json/categories.json', JSON.stringify(catToSave));
 
         console.log('Count of products: ', productCounter);
         console.log('Loading will take ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
@@ -284,6 +309,69 @@ describe('Parsing site... ', function () {
         "Для чувствительная кожи": "Для чувствительной кожи"
     };
 
+    var categoryMappings = {
+        "dlya-litsa": {
+            label: 'Для лица',
+            types: {
+                "ochishenie-tonizirovanie": "Очищающие средства",
+                "pilingi-i-skraby": "Пилинги/Скрабы",
+                "toniki": "Тоники",
+                "uvlazhnenie-kozhi": "Средства для увлажнения кожи",
+                "chuvstvitelnaja-kozha": "Уход за чувствительной кожей",
+                "problemnaja-kozha": "Уход за жирной проблемной кожей",
+                "pitanie-zashita-kozhi": "Питание, защита кожи",
+                "linija-uhoda-za-vozrastnoj-kozhej-s-efektom-botoksa": "Мимические и возрастные морщины",
+                "zrelaja-kozha": "Уход за зрелой кожей",
+                "uhod-za-kozhej-vokrug-glaz": "Уход за кожей век и губами",
+            },
+            productTypes: {
+                "pilingi-i-skraby": ["Пилинг", "Гоммаж", "Скраб"],
+                "toniki": ["Тоник"],
+                "uvlazhnenie-kozhi": ["Крем-сыворотка", "Сыворотка", "Крем", "Маска"],
+                "chuvstvitelnaja-kozha": ["Крем"],
+                "problemnaja-kozha": ["Крем", "Маска", "Крем-гель", "Гель"],
+                "pitanie-zashita-kozhi": ["Крем"],
+                "linija-uhoda-za-vozrastnoj-kozhej-s-efektom-botoksa": ["Крем", "Крем-сыворотка", "Сыворотка", "Лифтинг", "Крем-лифтинг"],
+                "zrelaja-kozha": ["Крем", "Крем-гель", "Гель", "Лифтинг", "Крем-лифтинг", "Маска"],
+                "uhod-za-kozhej-vokrug-glaz": ["Лосьон", "Крем-гель", "Крем", "Крем-сыворотка", "Сыворотка"]
+            }
+        },
+        "dlya-volos": {
+            label: "Для волос",
+            types: {
+                "shampuni": "Шампуни",
+                "balzamy": "Бальзамы для волос",
+                "maski": "Маски для волос",
+                "toniki": "Тоники для волос"
+            },
+            productTypes: {
+                "shampuni": ["Шампунь"],
+                "balzamy": ["Бальзам"],
+                "maski": ["Маска"],
+                "toniki": ["Тоник"]
+            }
+        },
+        "dlya-tela": {
+            label: "Для тела",
+            types: {
+                "uhod-za-rukami-i-nogami": "Уход за руками и ногами",
+                "sredstva-dlja-dusha-i-vanny": "Средства для душа и ванны",
+                "anticelljulitnyj-kompleks": "Антицеллюлитный комплекс",
+                "solncezashitnye-sredstva": "Солнцезащитные средства"
+            },
+            productTypes: {
+                "uhod-za-rukami-i-nogami": ["Крем", "Лосьон"],
+                "sredstva-dlja-dusha-i-vanny": ["Гель"],
+                "anticelljulitnyj-kompleks": ["Крем", "Гель"],
+                "solncezashitnye-sredstva": ["Крем"]
+            }
+        }
+    };
+
+    var productTypeMappings = {
+        'pilingi-i-skraby': '',
+    };
+
     it('parse products', function (done) {
         var productsHash = {};
 
@@ -291,7 +379,13 @@ describe('Parsing site... ', function () {
             _.each(loadedProducts[catName], function (subCat) {
                 _.each(subCat, function (product, id) {
                     if (!product.page) return;
-                    if (productsHash[id]) return;
+                    if (productsHash[id]) {
+                        var diff = _.difference(product.categoryCodes,productsHash[id].categoryCodes);
+
+                        productsHash[id].categoryCodes = _.union(productsHash[id].categoryCodes, diff);
+
+                        return;
+                    }
 
                     productsHash[id] = product;
 
@@ -387,6 +481,23 @@ describe('Parsing site... ', function () {
 
             product.country = _.trim($('#product-features tr td[itemprop="strana_proizvoditel_"]').text());
 
+            var catMappingKey = _.find(product.categoryCodes, function (catCode) {
+                return !_.isEmpty(categoryMappings[catCode]);
+            });
+
+            if (catMappingKey) {
+                product.categories = _.filter(categoryMappings[catMappingKey].types, function (type, key) {
+                    return _.includes(product.categoryCodes, key);
+                });
+
+                var types = _.filter(categoryMappings[catMappingKey].productTypes, function (type, key) {
+                    return _.includes(product.categoryCodes, key);
+                });
+
+                _.each(types, function (type) {
+                    product.types = _.union(product.types, type);
+                });
+            }
             // todo:
             delete product.page;
         });
