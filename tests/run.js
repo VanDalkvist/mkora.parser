@@ -26,7 +26,19 @@ describe('Parsing site... ', function () {
     before("read file '" + 'dist/' + config.file + "' if exist", function (done) {
 
         _makeDir('dist').then(function () {
-            return Q.all([_makeDir('dist/categories'), _makeDir('dist/products')]);
+            return Q.all([
+                _makeDir('dist/categories'),
+                _makeDir('dist/images'),
+                _makeDir('dist/site-images'),
+                _makeDir('dist/products').then(function () {
+                    return Q.all([
+                        _makeDir('dist/products/biokosmetika-kora-organic'),
+                        _makeDir('dist/products/kosmetika-kora/').then(function () {
+                            return _makeDir('dist/products/kosmetika-kora/ezhednevnyj-uhod-za-volosami');
+                        })
+                    ]);
+                })
+            ]);
         }).then(function () {
             _readFile('dist/' + config.file).then(function (data) {
                 context.fileContent = data;
@@ -107,6 +119,12 @@ describe('Parsing site... ', function () {
 
             var filtered = _filterCategories(categories, categoryRef);
             categoriesToGrab.push({categories: filtered, ref: categoryRef, code: code});
+
+            // exceptions
+            if (code === 'kosmetika-kora') {
+                filtered.push('/biokosmetika-kora-organic/');
+                filtered.push('/kosmetika-kora/ezhednevnyj-uhod-za-volosami/');
+            }
 
             categoriesHash[code] = {
                 code: code,
@@ -231,7 +249,7 @@ describe('Parsing site... ', function () {
             console.log("should load all products for '" + cat.code + "' and save to file system if not exist");
 
             return Q.each(_.mapValues(cat.subCategoriesHash, function (subCat, subCode) {
-                console.log("should load all products for sub category '" + subCode + "'");
+                //console.log("should load all products for sub category '" + subCode + "'");
 
                 var productCategories = _.map(subCat.breadcrumbs, function (crumb) {
                     return crumb.name;
@@ -245,7 +263,13 @@ describe('Parsing site... ', function () {
                     productCounter++;
 
                     return _readOrDownloadAndWrite(fileName, product.href, function (data) {
-                        return {title: product.title, ref: product.href, page: data, code: name, categoryCodes: productCategories};
+                        return {
+                            title: product.title,
+                            ref: product.href,
+                            page: data,
+                            code: name,
+                            categoryCodes: productCategories
+                        };
                     });
                 });
 
@@ -285,7 +309,13 @@ describe('Parsing site... ', function () {
 
     });
 
-    var categoriesToParse = ['kosmetika-kora'];
+    var categoriesToParse = [
+        'kosmetika-kora',
+        'new-line-prof-linija',
+        'new-line-domashnij-uhod',
+        'sante_qj',
+        'izrailskaja-kosmetika'
+    ];
 
     var categoryBrands = {
         'kosmetika-kora': 'Kora',
@@ -365,22 +395,69 @@ describe('Parsing site... ', function () {
                 "anticelljulitnyj-kompleks": ["Крем", "Гель"],
                 "solncezashitnye-sredstva": ["Крем"]
             }
+        },
+        "new-line-domashnij-uhod": {
+            types: {
+                "ochishchayushchie-sredstva": "Очищающие средства",
+                "ochishchenie-i-tonizirovanie": "Очищающие средства",
+                "uvlazhnenie-kozhi_8h": "Средства для увлажнения кожи"
+            }
+        },
+        "new-line-prof-linija": {
+            "korrektsiya-mimicheskikh-morshchin": "Мимические и возрастные морщины",
+            "ochishajushie-sredstva": "Очищающие средства",
+            "pilingi": "Пилинги/Скрабы",
+            "toniki": "Тоники",
+            "koncentraty": "Пептиды",
+            //"suhie-maski": "Сухие маски New Line",
+            //"krem-maski": "Крем-маски New Line",
+            "krem-maski-grjazevye": "Крем-маски грязевые",
+            "massazhnye-sredstva": "Массажные средства",
+            "anticelljulitnye-sredstva-spa-uhod": "Антицеллюлитные средства"
+        },
+        "sante_qj": {
+            "sante": "Уход за руками",
+            "uhod-za-rukami": "Уход за ногами",
+            "uhod-za-nogami_73": "Уход за телом",
+            "uhod-za-licom": "Уход за волосами",
+            "uhod-za-volosami-i-telom": "Гели для душа"
+        },
+        "izrailskaja-kosmetika": {
+            "sredstva-dlja-muzhchin": "Средства для мужчин",
+            "uhod-za-kozhej-lica": "Для лица",
+            "uhod-za-kozhej-lica.ochishchayushchie-sredstva": "Очищающие средства",
+            "uhod-za-kozhej-lica.kremi": "Для лица",
+            "uhod-za-kozhej-lica.maski": "Для лица",
+            "uhod-za-volosami": "Для волос",
+            "uhod-za-volosami.shampuni": "Шампуни",
+            "uhod-za-volosami.balzamy": "Бальзамы",
+            "uhod-za-volosami.maski": "Маски",
+            "uhod-za-volosami.maslo-dlya-volos": "Масло для волос",
+            "dlya-tela": "Для тела",
+            "dlya-tela.geli-dlya-dusha": "Гели для душа",
+            "dlya-tela.pilingi": "Для тела",
+            "dlya-tela.mylo": "Для тела",
+            "dlya-tela.maslo-dlja-tela": "Для тела",
+            "dlya-tela.kremi": "Для тела",
+            "dlya-tela.soli-i-grjazi": "Для тела",
+            "dlya-tela.dezodoranti": "Для тела",
+            "dlya-tela.ukhod-za-rukami-i-nogami": "Для тела"
+        },
+        "biokosmetika-kora-organic": {
+            "biokosmetika-kora-organic": "Биокосметика"
         }
     };
 
-    var productTypeMappings = {
-        'pilingi-i-skraby': '',
-    };
+    var productsHash = {};
 
     it('parse products', function (done) {
-        var productsHash = {};
 
         _.each(categoriesToParse, function (catName) {
             _.each(loadedProducts[catName], function (subCat) {
                 _.each(subCat, function (product, id) {
                     if (!product.page) return;
                     if (productsHash[id]) {
-                        var diff = _.difference(product.categoryCodes,productsHash[id].categoryCodes);
+                        var diff = _.difference(product.categoryCodes, productsHash[id].categoryCodes);
 
                         productsHash[id].categoryCodes = _.union(productsHash[id].categoryCodes, diff);
 
@@ -507,6 +584,96 @@ describe('Parsing site... ', function () {
         done();
     });
 
+    it("JSON to CSV", function (done) {
+
+        var json2csv = require('json2csv');
+
+        var products = _.map(productsHash, function (product) {
+            product.type = _setMany(product.types);
+            product.skin = _setMany(product.skin);
+
+            var isFace = _.includes(product.categoryCodes, 'dlya-litsa', _addQuotes);
+
+            product['for-face'] = isFace ? _setMany(product.categories) : '';
+
+            var isHairs = _.includes(product.categoryCodes, 'dlya-volos', _addQuotes);
+
+            product['for-hairs'] = isHairs ? _setMany(product.categories) : '';
+
+            var isBody = _.includes(product.categoryCodes, 'dlya-tela', _addQuotes);
+
+            product['for-body'] = isBody ? _setMany(product.categories) : '';
+
+            product.currency = 'RUB';
+            product.access = 1;
+            product.status = 1;
+            product.globalType = 'Косметика';
+
+            return product;
+        });
+
+        var fields = [
+            'title',
+            'brand',
+            'price',
+            'description',
+            'description',
+            'composition',
+            'action',
+            'application',
+            'course',
+            'contraindications',
+            'volume',
+            'country',
+            'type',
+            'skin',
+            'for-face',
+            'for-hairs',
+            'for-body',
+            'currency',
+            'access',
+            'status',
+            'globalType',
+        ];
+
+        var fieldNames = [
+            'Наименование',
+            'Бренд',
+            'Цена',
+            'Краткое описание',
+            'Описание',
+            'Активные ингредиенты',
+            'Действие',
+            'Применение',
+            'Курс',
+            'Противопоказания',
+            'Объём',
+            'Страна производитель',
+            'Тип продукта',
+            'Тип кожи',
+            'Для лица. Тип категории',
+            'Для волос. Тип категории',
+            'Для тела. Тип категории',
+            'Валюта',
+            'Доступен для заказа',
+            'Статус',
+            'Тип товаров',
+        ];
+
+        _writeFile('dist/json/products_array.json', JSON.stringify(products)).then(function () {
+            json2csv({data: products, fields: fields, fieldNames: fieldNames}, function (err, csv) {
+                if (err) console.log(err);
+
+                _writeFile('dist/result.csv', csv).then(function () {
+                    done();
+                }, function (err) {
+                    done(err);
+                });
+            });
+        });
+
+    });
+
     // private functions
 
     function _prepareRequest(request) {
@@ -570,23 +737,23 @@ describe('Parsing site... ', function () {
 
             return mapper ? mapper(data) : data;
         }, function () {
-            console.log('Warning!!!');
-            return mapper ? mapper(null) : null;
+            //console.log('Warning!!!');
+            //return mapper ? mapper(null) : null;
             return _getRequestPromise(ref).then(function (content) {
                 return _writeFile(fileName, content).then(function () {
                     console.log('File was written. ', fileName);
 
                     --productCounter;
-                    console.log('Left products: ', productCounter);
-                    console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+                    //console.log('Left products: ', productCounter);
+                    //console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
 
                     return mapper ? mapper(content) : content;
                 }, function (err) {
                     console.log('Error during writing... ', err);
 
                     --productCounter;
-                    console.log('Left products: ', productCounter);
-                    console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+                    //console.log('Left products: ', productCounter);
+                    //console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
 
                     return mapper ? mapper(content) : content;
                 });
@@ -639,6 +806,26 @@ describe('Parsing site... ', function () {
         timer += defaultTimeout;
 
         return deferred.promise;
+    }
+
+    function _setMany(arr, wrap) {
+        var val;
+
+        if (!arr || arr.length === 0) {
+            val = '';
+        }
+        else if (arr.length === 1) {
+            val = arr[0];
+        } else {
+            var values = wrap ? _.map(arr, wrap) : arr;
+            val = '{' + _.join(values, ',') + '}';
+        }
+
+        return val;
+    }
+
+    function _addQuotes(item) {
+        return '"' + item + '"';
     }
 
 });
