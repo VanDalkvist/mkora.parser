@@ -5,6 +5,7 @@ var Q = require('q');
 var fs = require('fs');
 var cheerio = require('cheerio');
 var entities = require("entities");
+var request = require("request");
 
 var assert = chai.assert;
 var should = chai.should();
@@ -15,11 +16,13 @@ var config = require('../settings/config.json');
 var site = config.site;
 console.log('Site to parse: ', site);
 
-var request = superTest(site);
+var loader = superTest(site);
 
 var mainPageParser = require('../modules/parsers/main-page.parser');
 
 describe('Parsing site... ', function () {
+
+    return;
 
     var $, context = {fileContent: null};
 
@@ -57,7 +60,7 @@ describe('Parsing site... ', function () {
 
         console.log("Main html file does not exist. Need to download.");
 
-        _prepareRequest(request.get('/'))
+        _prepareRequest(loader.get('/'))
             .expect(200)
             .end(function (err, res) {
                 if (err) return done(err);
@@ -675,10 +678,8 @@ describe('Parsing site... ', function () {
     });
 
     it("should load images", function (done) {
-
         var imagesHash = {};
         var imgPromises = _.map(productsHash, function (product) {
-
             var name = product.img.replace(/\//g, '_');
             imagesHash[name] = product.title;
 
@@ -687,7 +688,7 @@ describe('Parsing site... ', function () {
             return _readOrDownloadAndWrite(fileName, product.ref);
         });
 
-        _writeFile('dist/json/img-map.json', imagesHash).then(function () {
+        _writeFile('dist/json/img-map.json', JSON.stringify(imagesHash)).then(function () {
             Q.all(imgPromises).then(function () {
                 done();
             }, function (err) {
@@ -726,158 +727,188 @@ describe('Parsing site... ', function () {
         });
     });
 
-    // private functions
+});
 
-    function _prepareRequest(request) {
-        return request
-            .set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
-            .set('Accept-Encoding', 'gzip, deflate, sdch')
-            .set('Accept-Language', 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4,es;q=0.2');
-    }
+describe('Loading image test', function () {
 
-    function _filterCategories(categories, categoryName) {
-        var hrefs = categories.filter(function (ref) {
-            return ref !== categoryName && ref.indexOf(categoryName) > -1;
+    it('should download image', function (done) {
+        var imageUrl = 'http://www.mkora.ru/wa-data/public/shop/products/86/06/686/images/1331/1331.970.jpg';
+        var fileName = 'dist/images/test.jpg';
+        _downloadAndSave(imageUrl, fileName, function (err) {
+            console.log('very good!');
+            if (err) return done(err);
+
+            done();
         });
-
-        console.log("'" + categoryName + "' categories count - ", hrefs.length);
-
-        return hrefs;
-    }
-
-    function _readFile(fileName) {
-        var deferred = Q.defer();
-        fs.readFile(fileName, 'utf8', function (err, data) {
-            if (err) {
-                //console.log("File does not exist.");
-                return deferred.reject(err);
-            }
-
-            //console.log("File is already exist. Won't download");
-            deferred.resolve(data);
-        });
-        return deferred.promise;
-    }
-
-    function _writeFile(fileName, content) {
-        var deferred = Q.defer();
-        fs.writeFile(fileName, content, function (err, data) {
-            if (err) return deferred.reject(err);
-
-            deferred.resolve(data);
-        });
-        return deferred.promise;
-    }
-
-    function _mapCategory(cat) {
-        console.log("'" + cat.ref + "' category pages to grab: ", cat.sub.length);
-        return Q.all(cat.sub.map(function _mapCategoryLink(subCategoryRef) {
-            var name = subCategoryRef.replace(/\//g, '_');
-            var fileName = 'dist/categories/' + cat.code + '/' + name + '.html';
-            return _readOrDownloadAndWrite(fileName, subCategoryRef, function (data) {
-                return {ref: subCategoryRef, page: data};
-            });
-        }));
-    }
-
-    function _readOrDownloadAndWrite(fileName, ref, mapper) {
-        return _readFile(fileName).then(function (data) {
-            //console.log('File is already exist.', fileName);
-            --productCounter;
-            //console.log('Left products: ', productCounter);
-            //console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
-
-            return mapper ? mapper(data) : data;
-        }, function () {
-            //console.log('Warning!!!');
-            //return mapper ? mapper(null) : null;
-            return _getRequestPromise(ref).then(function (content) {
-                return _writeFile(fileName, content).then(function () {
-                    console.log('File was written. ', fileName);
-
-                    --productCounter;
-                    //console.log('Left products: ', productCounter);
-                    //console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
-
-                    return mapper ? mapper(content) : content;
-                }, function (err) {
-                    console.log('Error during writing... ', err);
-
-                    --productCounter;
-                    //console.log('Left products: ', productCounter);
-                    //console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
-
-                    return mapper ? mapper(content) : content;
-                });
-            });
-        });
-    }
-
-    function _makeDir(name) {
-        var deferred = Q.defer();
-
-        try {
-            fs.mkdirSync(name);
-            deferred.resolve();
-        } catch (e) {
-            if (e.code != 'EEXIST') return deferred.reject(e);
-            deferred.resolve();
-        }
-
-        return deferred.promise;
-    }
-
-    function _createCodeFromUrl(url, obj) {
-        var refParts = _.filter(_.split(url, '/'));
-
-        obj.breadcrumbs = _.mapValues(_.keyBy(refParts), function (part) {
-            return {name: part};
-        });
-
-        var code = _.join(refParts, '.');
-        return code;
-    }
-
-    function _getRequestPromise(ref) {
-        var deferred = Q.defer();
-
-        setTimeout(function () {
-            _prepareRequest(request.get(ref))
-                .expect(200)
-                .end(function (err, res) {
-                    if (err) {
-                        console.log("failed loading '" + ref + "' ..... ");
-                        return deferred.reject(err);
-                    }
-
-                    console.log("loaded '" + ref + "' ");
-                    deferred.resolve(res.text);
-                });
-        }, timer);
-
-        timer += defaultTimeout;
-
-        return deferred.promise;
-    }
-
-    function _setMany(arr, wrap) {
-        var val;
-
-        if (!arr || arr.length === 0) {
-            val = '';
-        }
-        else if (arr.length === 1) {
-            val = arr[0];
-        } else {
-            var values = wrap ? _.map(arr, wrap) : arr;
-            val = '{' + _.join(values, ',') + '}';
-        }
-
-        return val;
-    }
-
-    function _addQuotes(item) {
-        return '"' + item + '"';
-    }
+    });
 
 });
+
+// private functions
+
+function _prepareRequest(request) {
+    return request
+        .set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
+        .set('Accept-Encoding', 'gzip, deflate, sdch')
+        .set('Accept-Language', 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4,es;q=0.2');
+}
+
+function _filterCategories(categories, categoryName) {
+    var hrefs = categories.filter(function (ref) {
+        return ref !== categoryName && ref.indexOf(categoryName) > -1;
+    });
+
+    console.log("'" + categoryName + "' categories count - ", hrefs.length);
+
+    return hrefs;
+}
+
+function _readFile(fileName) {
+    var deferred = Q.defer();
+    fs.readFile(fileName, 'utf8', function (err, data) {
+        if (err) {
+            //console.log("File does not exist.");
+            return deferred.reject(err);
+        }
+
+        //console.log("File is already exist. Won't download");
+        deferred.resolve(data);
+    });
+    return deferred.promise;
+}
+
+function _writeFile(fileName, content) {
+    var deferred = Q.defer();
+    fs.writeFile(fileName, content, function (err, data) {
+        if (err) return deferred.reject(err);
+
+        deferred.resolve(data);
+    });
+    return deferred.promise;
+}
+
+function _mapCategory(cat) {
+    console.log("'" + cat.ref + "' category pages to grab: ", cat.sub.length);
+    return Q.all(cat.sub.map(function _mapCategoryLink(subCategoryRef) {
+        var name = subCategoryRef.replace(/\//g, '_');
+        var fileName = 'dist/categories/' + cat.code + '/' + name + '.html';
+        return _readOrDownloadAndWrite(fileName, subCategoryRef, function (data) {
+            return {ref: subCategoryRef, page: data};
+        });
+    }));
+}
+
+function _readOrDownloadAndWrite(fileName, ref, mapper) {
+    return _readFile(fileName).then(function (data) {
+        //console.log('File is already exist.', fileName);
+        //--productCounter;
+        //console.log('Left products: ', productCounter);
+        //console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+
+        return mapper ? mapper(data) : data;
+    }, function () {
+        //console.log('Warning!!!');
+        //return mapper ? mapper(null) : null;
+        return _getRequestPromise(ref).then(function (content) {
+            return _writeFile(fileName, content).then(function () {
+                console.log('File was written. ', fileName);
+
+                //--productCounter;
+                //console.log('Left products: ', productCounter);
+                //console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+
+                return mapper ? mapper(content) : content;
+            }, function (err) {
+                console.log('Error during writing... ', err);
+
+                //--productCounter;
+                //console.log('Left products: ', productCounter);
+                //console.log('Remains ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
+
+                return mapper ? mapper(content) : content;
+            });
+        });
+    });
+}
+
+function _makeDir(name) {
+    var deferred = Q.defer();
+
+    try {
+        fs.mkdirSync(name);
+        deferred.resolve();
+    } catch (e) {
+        if (e.code != 'EEXIST') return deferred.reject(e);
+        deferred.resolve();
+    }
+
+    return deferred.promise;
+}
+
+function _createCodeFromUrl(url, obj) {
+    var refParts = _.filter(_.split(url, '/'));
+
+    obj.breadcrumbs = _.mapValues(_.keyBy(refParts), function (part) {
+        return {name: part};
+    });
+
+    var code = _.join(refParts, '.');
+    return code;
+}
+
+function _getRequestPromise(ref) {
+    var deferred = Q.defer();
+
+    setTimeout(function () {
+        _prepareRequest(loader.get(ref))
+            .expect(200)
+            .end(function (err, res) {
+                if (err) {
+                    console.log("failed loading '" + ref + "' ..... ");
+                    return deferred.reject(err);
+                }
+
+                console.log("loaded '" + ref + "' ");
+                deferred.resolve(res.text);
+            });
+    }, timer);
+
+    timer += defaultTimeout;
+
+    return deferred.promise;
+}
+
+function _setMany(arr, wrap) {
+    var val;
+
+    if (!arr || arr.length === 0) {
+        val = '';
+    }
+    else if (arr.length === 1) {
+        val = arr[0];
+    } else {
+        var values = wrap ? _.map(arr, wrap) : arr;
+        val = '{' + _.join(values, ',') + '}';
+    }
+
+    return val;
+}
+
+function _addQuotes(item) {
+    return '"' + item + '"';
+}
+
+function _downloadAndSave(uri, fileName, callback) {
+    request.head(uri, function (err, res) {
+        if (err) return callback(err);
+
+        console.log('content-type:', res.headers['content-type']);
+        console.log('content-length:', res.headers['content-length']);
+
+        request(uri).pipe(fs.createWriteStream(fileName)).on('close', callback);
+    });
+}
+
+function _loadOrDownloadAndSave(uri, fileName, callback) {
+
+}
