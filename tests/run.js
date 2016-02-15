@@ -4,8 +4,9 @@ var _ = require('lodash');
 var Q = require('q');
 var fs = require('fs');
 var cheerio = require('cheerio');
-var entities = require("entities");
-var request = require("request");
+var entities = require('entities');
+var request = require('request');
+var path = require('path');
 
 var assert = chai.assert;
 var should = chai.should();
@@ -20,7 +21,7 @@ var loader = superTest(site);
 
 var mainPageParser = require('../modules/parsers/main-page.parser');
 
-describe('Parsing site... ', function () {
+describe("Parsing site... ", function () {
 
     return;
 
@@ -685,7 +686,18 @@ describe('Parsing site... ', function () {
 
             var fileName = 'dist/images/' + name;
 
-            return _readOrDownloadAndWrite(fileName, product.ref);
+            var deferred = Q.defer();
+
+            _readOrDownloadAndSave(product.ref, fileName, function (err, res) {
+                if (err) {
+                    console.log('Error during loading of ' + product.ref);
+                    deferred.reject(err);
+                }
+
+                deferred.resolve(res);
+            });
+
+            return deferred.promise;
         });
 
         _writeFile('dist/json/img-map.json', JSON.stringify(imagesHash)).then(function () {
@@ -708,14 +720,7 @@ describe('Parsing site... ', function () {
 
             var fileName = 'dist/site-images/' + product.title.replace(/\//g, '_') + '.' + (originalExtension || '');
 
-            return _readFile(fileName).then(function (data) {
-            }, function () {
-                return _readFile(originalFileName).then(function (content) {
-                    return _writeFile(fileName, content);
-                }, function () {
-                    console.log(':( ' + fileName);
-                });
-            });
+            return _readOrCopy(fileName, originalFileName, product.ref);
         });
 
         Q.all(imgPromises).then(function () {
@@ -731,14 +736,51 @@ describe('Parsing site... ', function () {
 
 describe('Loading image test', function () {
 
-    it('should download image', function (done) {
-        var imageUrl = 'http://www.mkora.ru/wa-data/public/shop/products/86/06/686/images/1331/1331.970.jpg';
-        var fileName = 'dist/images/test.jpg';
-        _downloadAndSave(imageUrl, fileName, function (err) {
-            console.log('very good!');
+    var testImageUrl = 'http://www.mkora.ru/wa-data/public/shop/products/86/06/686/images/1331/1331.970.jpg';
+
+    var originalFileName = 'dist/images/test.jpg';
+
+    var copyFileName = 'dist/images/test_copy.jpg';
+
+    // disabled test
+    it.skip('should download image', function (done) {
+        _downloadAndSave(testImageUrl, originalFileName, function (err) {
             if (err) return done(err);
 
+            console.log('very good!');
             done();
+        });
+    });
+
+    it("should copy image", function (done) {
+        _readOrCopy(copyFileName, originalFileName, copyFileName).then(function (err) {
+            if (err) return done(err);
+
+            console.log("Copied successfully.");
+            done();
+        });
+    });
+
+    it("should crop image", function (done) {
+        var easyImage = require('easyimage');
+
+        var croppedFileName = 'dist/images/test_copy_crop.jpg';
+
+        easyImage.crop({
+            src: copyFileName,
+            dst: croppedFileName,
+            width: 647,
+            height: 970,
+            cropheight: 770,
+            cropwidth: 647,
+            //quality: 1,
+            gravity: "South"
+        }).then(function (image) {
+            done();
+            console.log('Cropped: ' + image.width + ' x ' + image.height);
+        }, function (err) {
+            //console.log(err);
+            done(err);
         });
     });
 
@@ -909,6 +951,27 @@ function _downloadAndSave(uri, fileName, callback) {
     });
 }
 
-function _loadOrDownloadAndSave(uri, fileName, callback) {
+function _readOrDownloadAndSave(uri, fileName, callback) {
 
+    if (path.existsSync(fileName)) return _readFile(fileName).then(function (res) {
+        callback(null, res);
+    }, callback);
+
+    _downloadAndSave('http://' + config.site + uri, fileName, callback);
+}
+
+function _readOrCopy(fileName, originalFileName, id) {
+    return _readFile(fileName).then(function (data) {
+    }, function () {
+        var deferred = Q.defer();
+        fs.createReadStream(originalFileName).pipe(fs.createWriteStream(fileName)).on('close', function (err, res) {
+            if (err) {
+                console.log('Error during loading of ' + id);
+                deferred.reject(err);
+            }
+
+            deferred.resolve(res);
+        });
+        return deferred.promise;
+    });
 }
