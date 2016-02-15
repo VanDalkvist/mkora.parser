@@ -711,7 +711,7 @@ describe("Parsing site... ", function () {
         });
     });
 
-    it("rename images ", function (done) {
+    it("rename images", function (done) {
         var imgPromises = _.map(productsHash, function (product) {
 
             var originalFileName = 'dist/images/' + product.img.replace(/\//g, '_');
@@ -736,6 +736,10 @@ describe("Parsing site... ", function () {
 
 describe('Loading image test', function () {
 
+    before("create images dir", function () {
+        return _makeDir('dist/images');
+    });
+
     var testImageUrl = 'http://www.mkora.ru/wa-data/public/shop/products/86/06/686/images/1331/1331.970.jpg';
 
     var originalFileName = 'dist/images/test.jpg';
@@ -743,7 +747,7 @@ describe('Loading image test', function () {
     var copyFileName = 'dist/images/test_copy.jpg';
 
     // disabled test
-    it.skip('should download image', function (done) {
+    it('should download image', function (done) {
         _downloadAndSave(testImageUrl, originalFileName, function (err) {
             if (err) return done(err);
 
@@ -761,7 +765,7 @@ describe('Loading image test', function () {
         });
     });
 
-    it("should crop image", function (done) {
+    it.skip("should crop image", function (done) {
         var easyImage = require('easyimage');
 
         var croppedFileName = 'dist/images/test_copy_crop.jpg';
@@ -782,6 +786,49 @@ describe('Loading image test', function () {
             //console.log(err);
             done(err);
         });
+    });
+
+    it("should crop all files from directory", function (done) {
+        var dir = 'dist/images';
+        var images = fs.readdirSync(dir);
+
+        var easyImage = require('easyimage');
+
+        Q.all(_.map(images, function (imgPath) {
+
+            var fileName = dir + '/' + imgPath;
+            var croppedFileName =
+                dir + '/'
+                + path.basename(imgPath, path.extname(imgPath))
+                + '_crop' + path.extname(imgPath);
+
+            console.log("imgPath: " + imgPath);
+            console.log("copyFileName: " + fileName);
+            console.log("croppedFileName: " + croppedFileName);
+
+            var deferred = Q.defer();
+
+            easyImage.crop({
+                src: fileName,
+                dst: croppedFileName,
+                width: 647,
+                height: 970,
+                cropheight: 770,
+                cropwidth: 647,
+                gravity: "South"
+            }).then(function (image) {
+                console.log('Cropped: ' + image.width + ' x ' + image.height);
+                deferred.resolve(image);
+            }, function (err) {
+                deferred.reject(err);
+            });
+
+            return deferred.promise;
+        })).then(function () {
+            done();
+        }, function (err) {
+            done(err);
+        })
     });
 
 });
