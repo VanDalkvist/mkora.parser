@@ -674,6 +674,58 @@ describe('Parsing site... ', function () {
 
     });
 
+    it("should load images", function (done) {
+
+        var imagesHash = {};
+        var imgPromises = _.map(productsHash, function (product) {
+
+            var name = product.img.replace(/\//g, '_');
+            imagesHash[name] = product.title;
+
+            var fileName = 'dist/images/' + name;
+
+            return _readOrDownloadAndWrite(fileName, product.ref);
+        });
+
+        _writeFile('dist/json/img-map.json', imagesHash).then(function () {
+            Q.all(imgPromises).then(function () {
+                done();
+            }, function (err) {
+                done(err);
+            }).catch(function (err) {
+                done(err);
+            });
+        });
+    });
+
+    it("rename images ", function (done) {
+        var imgPromises = _.map(productsHash, function (product) {
+
+            var originalFileName = 'dist/images/' + product.img.replace(/\//g, '_');
+
+            var originalExtension = _.last(_.split(product.img, '.'));
+
+            var fileName = 'dist/site-images/' + product.title.replace(/\//g, '_') + '.' + (originalExtension || '');
+
+            return _readFile(fileName).then(function (data) {
+            }, function () {
+                return _readFile(originalFileName).then(function (content) {
+                    return _writeFile(fileName, content);
+                }, function () {
+                    console.log(':( ' + fileName);
+                });
+            });
+        });
+
+        Q.all(imgPromises).then(function () {
+            done();
+        }, function (err) {
+            done(err);
+        }).catch(function (err) {
+            done(err);
+        });
+    });
+
     // private functions
 
     function _prepareRequest(request) {
