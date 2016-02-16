@@ -13,6 +13,9 @@ var should = chai.should();
 var expect = chai.expect;
 
 var config = require('../settings/config.json');
+var urlUtils = require('../modules/common/url');
+
+var productSearcher = require('../modules/parsers/product.searcher');
 
 var site = config.site;
 console.log('Site to parse: ', site);
@@ -166,81 +169,33 @@ describe("Parsing site... ", function () {
                 });
             });
 
-            it('should parse products', function (done) {
-
-                var categoriesHashWithProductsPromise = _.mapValues(categoriesHash, function (cat) {
-
+            before("should create directories for products", function () {
+                return _.map(categoriesHash, function (cat) {
                     var breadcrumbs = _.filter(cat.ref.split('/'));
-                    var promise = breadcrumbs.reduce(function (prev, name) {
+                    return breadcrumbs.reduce(function (prev, name) {
                         return prev.then(function (prevName) {
                             return _makeDir('dist/products/' + prevName + '/' + name).then(function () {
                                 return prevName + '/' + name;
                             });
                         });
                     }, Q.when(''));
+                });
+            });
 
-                    return promise.then(function () {
-
-                        var subCategoriesHash = _.keyBy(cat.pages, function (page) {
-                            return _createCodeFromUrl(page.ref, page);
-                        });
-
-                        var subCatWithProductsHash = _.mapValues(subCategoriesHash, function (subCat) {
-                            var $ = cheerio.load(subCat.page);
-
-                            var productsList = $('#product-list .products-list').html();
-                            var $categoryName = $('h1.category-name');
-
-                            var isEmpty = _.isEmpty(productsList);
-
-                            if (isEmpty) {
-                                console.log(subCat.ref + " - category is empty. Skipping... ");
-                                return {categoryRef: subCat.ref, products: {}};
-                            }
-
-                            expect($('#product-list .products-list ul')).to.have.length(1);
-                            expect($('#product-list .products-list ul li')).not.to.be.empty;
-
-                            expect($('#product-list .products-list ul li[itemscope][itemtype="http://schema.org/Product"]')).not.to.be.empty;
-
-                            var $products = $('#product-list .products-list ul li[itemscope][itemtype="http://schema.org/Product"] .photo a[title]');
-
-                            expect($products).not.to.be.empty;
-
-                            var productsArray = $products.map(function (i, product) {
-                                var $product = $(product);
-
-                                return {
-                                    title: $product.attr('title'),
-                                    href: $product.attr('href')
-                                };
-                            }).toArray();
-
-                            var productsHash = _.keyBy(productsArray, function (product) {
-                                return _createCodeFromUrl(product.href, product);
-                            });
-
-                            return _.extend(subCat, {
-                                title: _.trim($categoryName.text()),
-                                products: productsArray,
-                                productsHash: productsHash
-                            });
-                        });
-
-                        return Q.each(_.extend(cat, {
-                            subCategoriesHash: subCatWithProductsHash
-                        }));
+            it('should parse products', function () {
+                return Q.each(_.mapValues(categoriesHash, function _parseProductsLinks(cat) {
+                    var subCategoriesHash = _.keyBy(cat.pages, function (page) {
+                        return urlUtils.createCodeFromUrl(page.ref, page);
                     });
-
-                });
-
-                Q.each(categoriesHashWithProductsPromise).then(function (res) {
-                    done();
-                }, function (err) {
-                    done(err);
-                }).catch(function (err) {
-                    done(err);
-                });
+                    var subCatWithProductsHash = _.mapValues(subCategoriesHash, function (subCat) {
+                        var subCatTitle = _.trim($('h1.category-name').text());
+                        var productsHash = productSearcher.find(subCat.page);
+                        return _.extend(subCat, {title: subCatTitle, productsHash: productsHash});
+                    });
+                    return Q.each(_.extend(cat, {
+                        subCategoriesHash: subCatWithProductsHash
+                    }));
+                }));
             });
 
             var timer = 0;
@@ -1091,17 +1046,6 @@ function _makeDir(name) {
     }
 
     return deferred.promise;
-}
-
-function _createCodeFromUrl(url, obj) {
-    var refParts = _.filter(_.split(url, '/'));
-
-    obj.breadcrumbs = _.mapValues(_.keyBy(refParts), function (part) {
-        return {name: part};
-    });
-
-    var code = _.join(refParts, '.');
-    return code;
 }
 
 function _getRequestPromise(ref) {
