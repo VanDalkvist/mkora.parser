@@ -842,6 +842,55 @@ describe("Parsing site... ", function () {
         });
     });
 
+    describe.skip("import vendor codes", function () {
+
+        var relations = {};
+        before("load relation file", function () {
+            return _readFile('dist/json/relation.json').then(function (content) {
+                var relation = JSON.parse(content);
+
+                _.each(relation, function (val) {
+                    relations[val.Code + "-code"] = val.Id;
+                });
+            });
+        });
+
+        it("set vendor codes", function (done) {
+
+            return _readFile('dist/json/products.json').then(function (productsString) {
+                var productsHash = JSON.parse(productsString);
+
+                var json2csv = require('json2csv');
+
+                var products = _.map(productsHash, function (product) {
+                    var code = product.vendor + "-code";
+                    return {title: product.title, vendorCode: relations[code]};
+                });
+
+                var fields = [
+                    'title',
+                    'vendorCode'
+                ];
+
+                var fieldNames = [
+                    'Наименование',
+                    'Артикул'
+                ];
+
+                json2csv({data: products, fields: fields, fieldNames: fieldNames}, function (err, csv) {
+                    if (err) return done(err);
+
+                    _writeFile('dist/vendors.csv', csv).then(function () {
+                        done();
+                    }, function (err) {
+                        done(err);
+                    });
+                });
+            });
+        });
+
+    });
+
 });
 
 describe.skip('Loading image test', function () {
