@@ -140,7 +140,7 @@ describe("Parsing site... ", function () {
 
         var categoryPagesPromise;
 
-        describe.skip("Parse products and save to json and CSV", function () {
+        describe("Parse products and save to json and CSV", function () {
 
             it('should load all categories page', function (done) {
 
@@ -248,7 +248,7 @@ describe("Parsing site... ", function () {
             var defaultTimeout = 6000;
             var loadedProducts;
 
-            it.skip("Load all products", function (allDone) {
+            it("Load all products", function (allDone) {
 
                 var all = _.mapValues(categoriesHash, function (cat) {
                     console.log("should load all products for '" + cat.code + "' and save to file system if not exist");
@@ -326,7 +326,7 @@ describe("Parsing site... ", function () {
                 'kosmetika-kora': 'Kora',
                 'new-line-prof-linija': 'New Line',
                 'new-line-domashnij-uhod': 'New Line',
-                'sante_qj': 'New Line',
+                'sante_qj': 'Sante',
                 'izrailskaja-kosmetika': 'Health & Beauty'
             };
 
@@ -455,7 +455,7 @@ describe("Parsing site... ", function () {
 
             var productsHash = {};
 
-            it.skip('parse products', function (done) {
+            it('parse products', function (done) {
 
                 _.each(categoriesToParse, function (catName) {
                     _.each(loadedProducts[catName], function (subCat) {
@@ -494,6 +494,8 @@ describe("Parsing site... ", function () {
                     var $price = $('.add2cart span.price[data-price]');
 
                     product.price = parseInt($price.attr('data-price'));
+
+                    product.vendor = parseInt($('.hint[itemprop="name"] b').text());
 
                     var $description = $('#product-description');
                     expect($description.html()).to.exist;
@@ -589,7 +591,7 @@ describe("Parsing site... ", function () {
                 done();
             });
 
-            it.skip("JSON to CSV", function (done) {
+            it("JSON to CSV", function (done) {
 
                 var json2csv = require('json2csv');
 
@@ -686,7 +688,25 @@ describe("Parsing site... ", function () {
 
         var defaultTimeout = 1000;
 
-        it("should load images", function () {
+        var brands = [
+            'Kora',
+            'New Line',
+            'Sante',
+            'Health & Beauty'
+        ];
+
+        before(function () {
+            return Q.each({
+                images: Q.all(brands.map(function (brand) {
+                    return _makeDir('dist/images/' + brand);
+                })),
+                toCrop: Q.all(brands.map(function (brand) {
+                    return _makeDir('dist/to-crop/' + brand);
+                }))
+            });
+        });
+
+        it.skip("should load images", function () {
             return _readFile('dist/json/products.json').then(function (productsString) {
                 var imagesHash = {};
 
@@ -698,17 +718,18 @@ describe("Parsing site... ", function () {
                     var name = product.img.replace(/\//g, '_');
                     imagesHash[name] = product.title;
 
-                    var fileName = 'dist/images/' + name;
+                    var fileName = 'dist/images/' + product.brand + '/' + name;
                     productCounter++;
                     var deferred = Q.defer();
 
                     setTimeout(function () {
-                        _readOrDownloadAndSave(product.ref, fileName, function (err, res) {
+                        _readOrDownloadAndSave(product.img, fileName, function (err, res) {
                             if (err) {
                                 console.log('Error during loading of ' + product.ref);
                                 deferred.reject(err);
                             }
 
+                            console.log("image for " + product.ref + " was loaded");
                             deferred.resolve(res);
                         });
                     }, productCounter * defaultTimeout);
@@ -722,14 +743,49 @@ describe("Parsing site... ", function () {
             });
         });
 
+        it.skip("crop images", function () {
+            var easyImage = require('easyimage');
+
+            return Q.all(brands.map(function (brand) {
+                var srcDir = 'dist/to-crop/' + brand;
+                var dstDir = 'dist/images/' + brand;
+                var images = fs.readdirSync(srcDir);
+
+                return Q.all(_.map(images, function (imgPath) {
+
+                    var fileName = srcDir + '/' + imgPath;
+                    var croppedFilePath = dstDir + '/' + imgPath;
+
+                    var deferred = Q.defer();
+
+                    easyImage.crop({
+                        src: fileName,
+                        dst: croppedFilePath,
+                        width: 647,
+                        height: 970,
+                        cropheight: 770,
+                        cropwidth: 647,
+                        gravity: "South"
+                    }).then(function (image) {
+                        console.log('Cropped: "' + imgPath + '" ' + image.width + ' x ' + image.height);
+                        deferred.resolve(image);
+                    }, function (err) {
+                        deferred.reject(err);
+                    });
+
+                    return deferred.promise;
+                }));
+            }));
+        });
+
         it.skip("rename images", function (done) {
             var imgPromises = _.map(productsHash, function (product) {
 
                 var originalFileName = 'dist/images/' + product.img.replace(/\//g, '_');
 
-                var originalExtension = _.last(_.split(product.img, '.'));
+                var originalExtension = path.extname(product.img);
 
-                var fileName = 'dist/site-images/' + product.title.replace(/\//g, '_') + '.' + (originalExtension || '');
+                var fileName = 'dist/site-images/' + product.title.replace(/\//g, '_') + '.' + (originalExtension || '.jpg');
 
                 return _readOrCopy(fileName, originalFileName, product.ref);
             });
@@ -740,6 +796,48 @@ describe("Parsing site... ", function () {
                 done(err);
             }).catch(function (err) {
                 done(err);
+            });
+        });
+
+        it("import images to CSV", function (done) {
+            _readFile('dist/json/products.json').then(function (productsString) {
+                var productsHash = JSON.parse(productsString);
+                var prefix = 'http://korann.host.webasyst.com/wa-data/public/site/images/';
+
+                var json2csv = require('json2csv');
+
+                var products = _.map(productsHash, function (product) {
+                    var name = product.img.replace(/\//g, '_');
+
+                    var images = prefix + product.brand + '/' + name;
+
+                    return {title: product.title, images: images, brand: product.brand, globalType: "Косметика"};
+                });
+
+                var fields = [
+                    'title',
+                    'images',
+                    'brand',
+                    'globalType',
+                ];
+
+                var fieldNames = [
+                    'Наименование',
+                    'Изображения',
+                    'Бренд',
+                    'Тип товаров',
+                ];
+
+                json2csv({data: products, fields: fields, fieldNames: fieldNames}, function (err, csv) {
+                    if (err) console.log(err);
+
+                    _writeFile('dist/images.csv', csv).then(function () {
+                        done();
+                    }, function (err) {
+                        done(err);
+                    });
+                });
+
             });
         });
     });
@@ -800,7 +898,7 @@ describe.skip('Loading image test', function () {
         });
     });
 
-    it("should crop all files from directory", function (done) {
+    it.skip("should crop all files from directory", function (done) {
         var dir = 'dist/images';
         var images = fs.readdirSync(dir);
 
@@ -1003,8 +1101,8 @@ function _downloadAndSave(uri, fileName, callback) {
     request.head(uri, function (err, res) {
         if (err) return callback(err);
 
-        console.log('content-type:', res.headers['content-type']);
-        console.log('content-length:', res.headers['content-length']);
+        //console.log('content-type:', res.headers['content-type']);
+        //console.log('content-length:', res.headers['content-length']);
 
         request(uri).pipe(fs.createWriteStream(fileName)).on('close', callback);
     });
