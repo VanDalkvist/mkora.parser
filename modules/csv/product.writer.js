@@ -1,10 +1,9 @@
 // dependencies
 
 var _ = require('lodash');
-var Q = require('q');
-var json2csv = require('json2csv');
 
 var fileSystem = require('../common/fs');
+var csvWriter = require('../csv/writer');
 var productMapping = require('../mappings/product.mapping');
 
 // exports
@@ -17,7 +16,7 @@ module.exports = {
 
 // private methods
 
-function _write(productArrayFileName, productsHashFileName) {
+function _write(productArrayFileName, productsHashFileName, dstFileName) {
 
     return fileSystem.readFile(productsHashFileName)
         .then(function (productsHash) {
@@ -46,17 +45,9 @@ function _write(productArrayFileName, productsHashFileName) {
             });
         }).then(function (products) {
             return fileSystem.writeFile(productArrayFileName, JSON.stringify(products)).then(function () {
-                var deferred = Q.defer();
-                json2csv({data: products, fields: productMapping.fields, fieldNames: productMapping.fieldNames}, function (err, csv) {
-                    if (err) console.log(err);
-
-                    fileSystem.writeFile('dist/result.csv', csv).then(function () {
-                        deferred.resolve();
-                    }, function (err) {
-                        deferred.reject(err);
-                    });
-                });
-                return deferred.promise;
+                var fields = productMapping.fields;
+                var fieldNames = productMapping.fieldNames;
+                return csvWriter.write(dstFileName, products, fields, fieldNames);
             });
         });
 }

@@ -16,8 +16,6 @@ var config = require('../settings/config.json');
 var urlUtils = require('../modules/common/url');
 var fileSystem = require('../modules/common/fs');
 //var contentLoader = require('../modules/loaders/content.loader');
-var imageLoader = require('../modules/loaders/image.loader');
-var cropImages = require('../modules/images/crop');
 
 var productSearcher = require('../modules/parsers/product.searcher');
 var configuration = require('../modules/settings/configuration');
@@ -152,6 +150,8 @@ describe("Parsing site... ", function () {
         var categoryPagesPromise;
 
         describe("Parse products and save to json and CSV", function () {
+
+            var productWriter = require('../modules/csv/product.writer');
 
             it('should load all categories page', function (done) {
 
@@ -319,15 +319,18 @@ describe("Parsing site... ", function () {
             it("JSON to CSV", function () {
                 var productArrayFileName = 'dist/json/products_array.json';
 
-                var productWriter = require('../modules/csv/product.writer');
-
-                return productWriter.write(productArrayFileName, productsHashFileName);
+                var dstFileName = 'dist/result.csv';
+                return productWriter.write(productArrayFileName, productsHashFileName, dstFileName);
             });
 
         });
     });
 
     describe("Loading images", function () {
+
+        var imageLoader = require('../modules/loaders/image.loader');
+        var imageWriter = require('../modules/csv/image.writer');
+        var cropImages = require('../modules/images/crop');
 
         var brands = [
             'Kora',
@@ -362,51 +365,17 @@ describe("Parsing site... ", function () {
             }));
         });
 
-        it("import images to CSV", function (done) {
+        it("import images to CSV", function () {
             var prefix = 'http://korann.host.webasyst.com/wa-data/public/site/images/';
 
-            fileSystem.readFile(productsHashFileName).then(function (productsString) {
-                var productsHash = JSON.parse(productsString);
+            var dstFileName = 'dist/images.csv';
 
-                var json2csv = require('json2csv');
-
-                var products = _.map(productsHash, function (product) {
-                    var name = product.img.replace(/\//g, '_');
-
-                    var images = prefix + product.brand + '/' + name;
-
-                    return {title: product.title, images: images, brand: product.brand, globalType: "Косметика"};
-                });
-
-                var fields = [
-                    'title',
-                    'images',
-                    'brand',
-                    'globalType',
-                ];
-
-                var fieldNames = [
-                    'Наименование',
-                    'Изображения',
-                    'Бренд',
-                    'Тип товаров',
-                ];
-
-                json2csv({data: products, fields: fields, fieldNames: fieldNames}, function (err, csv) {
-                    if (err) console.log(err);
-
-                    fileSystem.writeFile('dist/images.csv', csv).then(function () {
-                        done();
-                    }, function (err) {
-                        done(err);
-                    });
-                });
-
-            });
+            return imageWriter.write(productsHashFileName, prefix, dstFileName);
         });
     });
 
     describe.skip("import vendor codes", function () {
+        var vendorCodeWriter = require('../modules/csv/vendor-code.writer');
 
         var relations = {};
         before("load relation file", function () {
@@ -419,38 +388,10 @@ describe("Parsing site... ", function () {
             });
         });
 
-        it("set vendor codes", function (done) {
+        it("set vendor codes", function () {
+            var dstFileName = 'dist/vendors.csv';
 
-            return fileSystem.readFile(productsHashFileName).then(function (productsString) {
-                var productsHash = JSON.parse(productsString);
-
-                var json2csv = require('json2csv');
-
-                var products = _.map(productsHash, function (product) {
-                    var code = product.vendor + "-code";
-                    return {title: product.title, vendorCode: relations[code]};
-                });
-
-                var fields = [
-                    'title',
-                    'vendorCode'
-                ];
-
-                var fieldNames = [
-                    'Наименование',
-                    'Артикул'
-                ];
-
-                json2csv({data: products, fields: fields, fieldNames: fieldNames}, function (err, csv) {
-                    if (err) return done(err);
-
-                    fileSystem.writeFile('dist/vendors.csv', csv).then(function () {
-                        done();
-                    }, function (err) {
-                        done(err);
-                    });
-                });
-            });
+            return vendorCodeWriter.write(productsHashFileName, dstFileName, relations);
         });
 
     });

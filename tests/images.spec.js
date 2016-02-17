@@ -99,8 +99,6 @@ describe.skip('Loading image test', function () {
         }));
     });
 
-
-
 });
 
 // private methods
