@@ -12,16 +12,16 @@ var assert = chai.assert;
 var should = chai.should();
 var expect = chai.expect;
 
-var config = require('../settings/config.json');
 var urlUtils = require('../modules/common/url');
 var fileSystem = require('../modules/common/fs');
-//var contentLoader = require('../modules/loaders/content.loader');
 
 var productSearcher = require('../modules/parsers/product.searcher');
 var configuration = require('../modules/settings/configuration');
 var mappings = require('../modules/mappings/mappings');
 
-var site = config.site;
+var site = "www.mkora.ru";
+var mainFile = "main.html"
+
 console.log('Site to parse: ', site);
 
 var loader = superTest(site);
@@ -34,7 +34,7 @@ describe("Parsing site... ", function () {
 
     var productsHashFileName = 'dist/json/products.json';
 
-    before("read file '" + 'dist/' + config.file + "' if exist", function (done) {
+    before("read file '" + 'dist/' + mainFile + "' if exist", function (done) {
 
         fileSystem.makeDir('dist').then(function () {
             return Q.all([
@@ -51,7 +51,7 @@ describe("Parsing site... ", function () {
                 })
             ]);
         }).then(function () {
-            fileSystem.readFile('dist/' + config.file).then(function (data) {
+            fileSystem.readFile('dist/' + mainFile).then(function (data) {
                 context.fileContent = data;
                 done();
             }, function () {
@@ -75,7 +75,7 @@ describe("Parsing site... ", function () {
                 .end(function (err, res) {
                     if (err) return done(err);
 
-                    var fileName = 'dist/' + config.file;
+                    var fileName = 'dist/' + mainFile;
 
                     fileSystem.writeFile(fileName, res.text).then(function () {
                         $ = mainPageParser.parse(res.text);
