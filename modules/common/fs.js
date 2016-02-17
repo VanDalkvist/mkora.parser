@@ -8,7 +8,8 @@ var fs = require('fs');
 module.exports = {
     writeFile: _writeFile,
     readFile: _readFile,
-    readOrCopy: _readOrCopy
+    readOrCopy: _readOrCopy,
+    makeDir: _makeDir
 };
 
 // initialization
@@ -54,4 +55,18 @@ function _readOrCopy(fileName, originalFileName, id) {
         });
         return deferred.promise;
     });
+}
+
+function _makeDir(name) {
+    var deferred = Q.defer();
+
+    try {
+        fs.mkdirSync(name);
+        deferred.resolve();
+    } catch (e) {
+        if (e.code != 'EEXIST') return deferred.reject(e);
+        deferred.resolve();
+    }
+
+    return deferred.promise;
 }

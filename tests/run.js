@@ -33,16 +33,16 @@ describe("Parsing site... ", function () {
 
     before("read file '" + 'dist/' + config.file + "' if exist", function (done) {
 
-        _makeDir('dist').then(function () {
+        fileSystem.makeDir('dist').then(function () {
             return Q.all([
-                _makeDir('dist/categories'),
-                _makeDir('dist/images'),
-                _makeDir('dist/site-images'),
-                _makeDir('dist/products').then(function () {
+                fileSystem.makeDir('dist/categories'),
+                fileSystem.makeDir('dist/images'),
+                fileSystem.makeDir('dist/site-images'),
+                fileSystem.makeDir('dist/products').then(function () {
                     return Q.all([
-                        _makeDir('dist/products/biokosmetika-kora-organic'),
-                        _makeDir('dist/products/kosmetika-kora/').then(function () {
-                            return _makeDir('dist/products/kosmetika-kora/ezhednevnyj-uhod-za-volosami');
+                        fileSystem.makeDir('dist/products/biokosmetika-kora-organic'),
+                        fileSystem.makeDir('dist/products/kosmetika-kora/').then(function () {
+                            return fileSystem.makeDir('dist/products/kosmetika-kora/ezhednevnyj-uhod-za-volosami');
                         })
                     ]);
                 })
@@ -151,7 +151,7 @@ describe("Parsing site... ", function () {
             it('should load all categories page', function (done) {
 
                 var toGrabPromises = _.mapValues(categoriesHash, function (cat) {
-                    return _makeDir('dist/categories/' + cat.code).then(function () {
+                    return fileSystem.makeDir('dist/categories/' + cat.code).then(function () {
                         return Q.each({
                             code: cat.code,
                             ref: cat.ref,
@@ -177,7 +177,7 @@ describe("Parsing site... ", function () {
                     var breadcrumbs = _.filter(cat.ref.split('/'));
                     return breadcrumbs.reduce(function (prev, name) {
                         return prev.then(function (prevName) {
-                            return _makeDir('dist/products/' + prevName + '/' + name).then(function () {
+                            return fileSystem.makeDir('dist/products/' + prevName + '/' + name).then(function () {
                                 return prevName + '/' + name;
                             });
                         });
@@ -338,10 +338,10 @@ describe("Parsing site... ", function () {
         before(function () {
             return Q.each({
                 images: Q.all(brands.map(function (brand) {
-                    return _makeDir('dist/images/' + brand);
+                    return fileSystem.makeDir('dist/images/' + brand);
                 })),
                 toCrop: Q.all(brands.map(function (brand) {
-                    return _makeDir('dist/to-crop/' + brand);
+                    return fileSystem.makeDir('dist/to-crop/' + brand);
                 }))
             });
         });
@@ -536,7 +536,7 @@ describe("Parsing site... ", function () {
 describe.skip('Loading image test', function () {
 
     before("create images dir", function () {
-        return _makeDir('dist/images');
+        return fileSystem.makeDir('dist/images');
     });
 
     var testImageUrl = 'http://www.mkora.ru/wa-data/public/shop/products/86/06/686/images/1331/1331.970.jpg';
@@ -693,20 +693,6 @@ function _readOrDownloadAndWrite(fileName, ref, mapper) {
             });
         });
     });
-}
-
-function _makeDir(name) {
-    var deferred = Q.defer();
-
-    try {
-        fs.mkdirSync(name);
-        deferred.resolve();
-    } catch (e) {
-        if (e.code != 'EEXIST') return deferred.reject(e);
-        deferred.resolve();
-    }
-
-    return deferred.promise;
 }
 
 function _getRequestPromise(ref) {
