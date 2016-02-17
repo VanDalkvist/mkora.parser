@@ -14,6 +14,7 @@ var expect = chai.expect;
 
 var config = require('../settings/config.json');
 var urlUtils = require('../modules/common/url');
+var fileSystem = require('../modules/common/fs');
 
 var productSearcher = require('../modules/parsers/product.searcher');
 var configuration = require('../modules/settings/configuration');
@@ -47,7 +48,7 @@ describe("Parsing site... ", function () {
                 })
             ]);
         }).then(function () {
-            _readFile('dist/' + config.file).then(function (data) {
+            fileSystem.readFile('dist/' + config.file).then(function (data) {
                 context.fileContent = data;
                 done();
             }, function () {
@@ -73,7 +74,7 @@ describe("Parsing site... ", function () {
 
                     var fileName = 'dist/' + config.file;
 
-                    _writeFile(fileName, res.text).then(function () {
+                    fileSystem.writeFile(fileName, res.text).then(function () {
                         $ = mainPageParser.parse(res.text);
 
                         assert.notEqual($, null);
@@ -255,7 +256,7 @@ describe("Parsing site... ", function () {
                     return _separate(_.join(_.drop(separated), '.'));
                 }
 
-                _writeFile('dist/json/categories.json', JSON.stringify(catToSave));
+                fileSystem.writeFile('dist/json/categories.json', JSON.stringify(catToSave));
 
                 console.log('Count of products: ', productCounter);
                 console.log('Loading will take ~ : ' + ((productCounter - 1) * 6) / 60 + ' minutes');
@@ -283,6 +284,8 @@ describe("Parsing site... ", function () {
 
             var productsHash = {};
 
+            var productsHashFileName = 'dist/json/products.json';
+
             it('parse products', function () {
 
                 _.each(categoriesToParse, function (catName) {
@@ -305,99 +308,17 @@ describe("Parsing site... ", function () {
                 });
 
                 var productParser = require('../modules/parsers/product.parser');
-                var products = _.mapValues(productsHash, productParser.parse);
+                _.each(productsHash, productParser.parse);
 
-                return _writeFile('dist/json/products.json', JSON.stringify(productsHash));
+                return fileSystem.writeFile(productsHashFileName, JSON.stringify(productsHash));
             });
 
-            it("JSON to CSV", function (done) {
+            it("JSON to CSV", function () {
+                var productArrayFileName = 'dist/json/products_array.json';
 
-                var json2csv = require('json2csv');
+                var productWriter = require('../modules/csv/product.writer');
 
-                var products = _.map(productsHash, function (product) {
-                    product.type = _setMany(product.types);
-                    product.skin = _setMany(product.skin);
-
-                    var isFace = _.includes(product.categoryCodes, 'dlya-litsa', _addQuotes);
-
-                    product['for-face'] = isFace ? _setMany(product.categories) : '';
-
-                    var isHairs = _.includes(product.categoryCodes, 'dlya-volos', _addQuotes);
-
-                    product['for-hairs'] = isHairs ? _setMany(product.categories) : '';
-
-                    var isBody = _.includes(product.categoryCodes, 'dlya-tela', _addQuotes);
-
-                    product['for-body'] = isBody ? _setMany(product.categories) : '';
-
-                    product.currency = 'RUB';
-                    product.access = 1;
-                    product.status = 1;
-                    product.globalType = 'Косметика';
-
-                    return product;
-                });
-
-                var fields = [
-                    'title',
-                    'brand',
-                    'price',
-                    'description',
-                    'description',
-                    'composition',
-                    'action',
-                    'application',
-                    'course',
-                    'contraindications',
-                    'volume',
-                    'country',
-                    'type',
-                    'skin',
-                    'for-face',
-                    'for-hairs',
-                    'for-body',
-                    'currency',
-                    'access',
-                    'status',
-                    'globalType',
-                ];
-
-                var fieldNames = [
-                    'Наименование',
-                    'Бренд',
-                    'Цена',
-                    'Краткое описание',
-                    'Описание',
-                    'Активные ингредиенты',
-                    'Действие',
-                    'Применение',
-                    'Курс',
-                    'Противопоказания',
-                    'Объём',
-                    'Страна производитель',
-                    'Тип продукта',
-                    'Тип кожи',
-                    'Для лица. Тип категории',
-                    'Для волос. Тип категории',
-                    'Для тела. Тип категории',
-                    'Валюта',
-                    'Доступен для заказа',
-                    'Статус',
-                    'Тип товаров',
-                ];
-
-                _writeFile('dist/json/products_array.json', JSON.stringify(products)).then(function () {
-                    json2csv({data: products, fields: fields, fieldNames: fieldNames}, function (err, csv) {
-                        if (err) console.log(err);
-
-                        _writeFile('dist/result.csv', csv).then(function () {
-                            done();
-                        }, function (err) {
-                            done(err);
-                        });
-                    });
-                });
-
+                return productWriter.write(productArrayFileName, productsHashFileName);
             });
 
         });
@@ -426,7 +347,7 @@ describe("Parsing site... ", function () {
         });
 
         it.skip("should load images", function () {
-            return _readFile('dist/json/products.json').then(function (productsString) {
+            return fileSystem.readFile('dist/json/products.json').then(function (productsString) {
                 var imagesHash = {};
 
                 var productsHash = JSON.parse(productsString);
@@ -456,7 +377,7 @@ describe("Parsing site... ", function () {
                     return deferred.promise;
                 });
 
-                return _writeFile('dist/json/img-map.json', JSON.stringify(imagesHash)).then(function () {
+                return fileSystem.writeFile('dist/json/img-map.json', JSON.stringify(imagesHash)).then(function () {
                     return Q.all(imgPromises);
                 });
             });
@@ -506,7 +427,7 @@ describe("Parsing site... ", function () {
 
                 var fileName = 'dist/site-images/' + product.title.replace(/\//g, '_') + '.' + (originalExtension || '.jpg');
 
-                return _readOrCopy(fileName, originalFileName, product.ref);
+                return fileSystem.readOrCopy(fileName, originalFileName, product.ref);
             });
 
             Q.all(imgPromises).then(function () {
@@ -519,7 +440,7 @@ describe("Parsing site... ", function () {
         });
 
         it("import images to CSV", function (done) {
-            _readFile('dist/json/products.json').then(function (productsString) {
+            fileSystem.readFile('dist/json/products.json').then(function (productsString) {
                 var productsHash = JSON.parse(productsString);
                 var prefix = 'http://korann.host.webasyst.com/wa-data/public/site/images/';
 
@@ -550,7 +471,7 @@ describe("Parsing site... ", function () {
                 json2csv({data: products, fields: fields, fieldNames: fieldNames}, function (err, csv) {
                     if (err) console.log(err);
 
-                    _writeFile('dist/images.csv', csv).then(function () {
+                    fileSystem.writeFile('dist/images.csv', csv).then(function () {
                         done();
                     }, function (err) {
                         done(err);
@@ -565,7 +486,7 @@ describe("Parsing site... ", function () {
 
         var relations = {};
         before("load relation file", function () {
-            return _readFile('dist/json/relation.json').then(function (content) {
+            return fileSystem.readFile('dist/json/relation.json').then(function (content) {
                 var relation = JSON.parse(content);
 
                 _.each(relation, function (val) {
@@ -576,7 +497,7 @@ describe("Parsing site... ", function () {
 
         it("set vendor codes", function (done) {
 
-            return _readFile('dist/json/products.json').then(function (productsString) {
+            return fileSystem.readFile('dist/json/products.json').then(function (productsString) {
                 var productsHash = JSON.parse(productsString);
 
                 var json2csv = require('json2csv');
@@ -599,7 +520,7 @@ describe("Parsing site... ", function () {
                 json2csv({data: products, fields: fields, fieldNames: fieldNames}, function (err, csv) {
                     if (err) return done(err);
 
-                    _writeFile('dist/vendors.csv', csv).then(function () {
+                    fileSystem.writeFile('dist/vendors.csv', csv).then(function () {
                         done();
                     }, function (err) {
                         done(err);
@@ -635,7 +556,7 @@ describe.skip('Loading image test', function () {
     });
 
     it("should copy image", function (done) {
-        _readOrCopy(copyFileName, originalFileName, copyFileName).then(function (err) {
+        fileSystem.readOrCopy(copyFileName, originalFileName, copyFileName).then(function (err) {
             if (err) return done(err);
 
             console.log("Copied successfully.");
@@ -730,30 +651,6 @@ function _filterCategories(categories, categoryName) {
     return hrefs;
 }
 
-function _readFile(fileName) {
-    var deferred = Q.defer();
-    fs.readFile(fileName, 'utf8', function (err, data) {
-        if (err) {
-            //console.log("File does not exist.");
-            return deferred.reject(err);
-        }
-
-        //console.log("File is already exist. Won't download");
-        deferred.resolve(data);
-    });
-    return deferred.promise;
-}
-
-function _writeFile(fileName, content) {
-    var deferred = Q.defer();
-    fs.writeFile(fileName, content, function (err, data) {
-        if (err) return deferred.reject(err);
-
-        deferred.resolve(data);
-    });
-    return deferred.promise;
-}
-
 function _mapCategory(cat) {
     console.log("'" + cat.ref + "' category pages to grab: ", cat.sub.length);
     return Q.all(cat.sub.map(function _mapCategoryLink(subCategoryRef) {
@@ -766,7 +663,7 @@ function _mapCategory(cat) {
 }
 
 function _readOrDownloadAndWrite(fileName, ref, mapper) {
-    return _readFile(fileName).then(function (data) {
+    return fileSystem.readFile(fileName).then(function (data) {
         //console.log('File is already exist.', fileName);
         //--productCounter;
         //console.log('Left products: ', productCounter);
@@ -777,7 +674,7 @@ function _readOrDownloadAndWrite(fileName, ref, mapper) {
         //console.log('Warning!!!');
         //return mapper ? mapper(null) : null;
         return _getRequestPromise(ref).then(function (content) {
-            return _writeFile(fileName, content).then(function () {
+            return fileSystem.writeFile(fileName, content).then(function () {
                 console.log('File was written. ', fileName);
 
                 //--productCounter;
@@ -834,26 +731,6 @@ function _getRequestPromise(ref) {
     return deferred.promise;
 }
 
-function _setMany(arr, wrap) {
-    var val;
-
-    if (!arr || arr.length === 0) {
-        val = '';
-    }
-    else if (arr.length === 1) {
-        val = arr[0];
-    } else {
-        var values = wrap ? _.map(arr, wrap) : arr;
-        val = '{' + _.join(values, ',') + '}';
-    }
-
-    return val;
-}
-
-function _addQuotes(item) {
-    return '"' + item + '"';
-}
-
 function _downloadAndSave(uri, fileName, callback) {
     request.head(uri, function (err, res) {
         if (err) return callback(err);
@@ -868,27 +745,11 @@ function _downloadAndSave(uri, fileName, callback) {
 function _readOrDownloadAndSave(uri, fileName, callback) {
     try {
         fs.accessSync(fileName);
-        return _readFile(fileName).then(function (res) {
+        return fileSystem.readFile(fileName).then(function (res) {
             callback(null, res);
         }, callback);
     }
     catch (e) {
         _downloadAndSave('http://' + config.site + uri, fileName, callback);
     }
-}
-
-function _readOrCopy(fileName, originalFileName, id) {
-    return _readFile(fileName).then(function (data) {
-    }, function () {
-        var deferred = Q.defer();
-        fs.createReadStream(originalFileName).pipe(fs.createWriteStream(fileName)).on('close', function (err, res) {
-            if (err) {
-                console.log('Error during loading of ' + id);
-                deferred.reject(err);
-            }
-
-            deferred.resolve(res);
-        });
-        return deferred.promise;
-    });
 }
