@@ -15,6 +15,9 @@ var expect = chai.expect;
 var config = require('../settings/config.json');
 var urlUtils = require('../modules/common/url');
 var fileSystem = require('../modules/common/fs');
+//var contentLoader = require('../modules/loaders/content.loader');
+var imageLoader = require('../modules/loaders/image.loader');
+var cropImages = require('../modules/images/crop');
 
 var productSearcher = require('../modules/parsers/product.searcher');
 var configuration = require('../modules/settings/configuration');
@@ -30,6 +33,8 @@ var mainPageParser = require('../modules/parsers/main-page.parser');
 describe("Parsing site... ", function () {
 
     var $, context = {fileContent: null};
+
+    var productsHashFileName = 'dist/json/products.json';
 
     before("read file '" + 'dist/' + config.file + "' if exist", function (done) {
 
@@ -284,8 +289,6 @@ describe("Parsing site... ", function () {
 
             var productsHash = {};
 
-            var productsHashFileName = 'dist/json/products.json';
-
             it('parse products', function () {
 
                 _.each(categoriesToParse, function (catName) {
@@ -326,8 +329,6 @@ describe("Parsing site... ", function () {
 
     describe("Loading images", function () {
 
-        var defaultTimeout = 1000;
-
         var brands = [
             'Kora',
             'New Line',
@@ -347,102 +348,25 @@ describe("Parsing site... ", function () {
         });
 
         it.skip("should load images", function () {
-            return fileSystem.readFile('dist/json/products.json').then(function (productsString) {
-                var imagesHash = {};
+            var imageMapFile = 'dist/json/img-map.json';
 
-                var productsHash = JSON.parse(productsString);
-
-                var productCounter = 0;
-
-                var imgPromises = _.map(productsHash, function (product) {
-                    var name = product.img.replace(/\//g, '_');
-                    imagesHash[name] = product.title;
-
-                    var fileName = 'dist/images/' + product.brand + '/' + name;
-                    productCounter++;
-                    var deferred = Q.defer();
-
-                    setTimeout(function () {
-                        _readOrDownloadAndSave(product.img, fileName, function (err, res) {
-                            if (err) {
-                                console.log('Error during loading of ' + product.ref);
-                                deferred.reject(err);
-                            }
-
-                            console.log("image for " + product.ref + " was loaded");
-                            deferred.resolve(res);
-                        });
-                    }, productCounter * defaultTimeout);
-
-                    return deferred.promise;
-                });
-
-                return fileSystem.writeFile('dist/json/img-map.json', JSON.stringify(imagesHash)).then(function () {
-                    return Q.all(imgPromises);
-                });
-            });
+            return imageLoader.load(productsHashFileName, imageMapFile);
         });
 
         it.skip("crop images", function () {
-            var easyImage = require('easyimage');
+            var src = 'dist/to-crop/';
+            var dst = 'dist/images/';
 
             return Q.all(brands.map(function (brand) {
-                var srcDir = 'dist/to-crop/' + brand;
-                var dstDir = 'dist/images/' + brand;
-                var images = fs.readdirSync(srcDir);
-
-                return Q.all(_.map(images, function (imgPath) {
-
-                    var fileName = srcDir + '/' + imgPath;
-                    var croppedFilePath = dstDir + '/' + imgPath;
-
-                    var deferred = Q.defer();
-
-                    easyImage.crop({
-                        src: fileName,
-                        dst: croppedFilePath,
-                        width: 647,
-                        height: 970,
-                        cropheight: 770,
-                        cropwidth: 647,
-                        gravity: "South"
-                    }).then(function (image) {
-                        console.log('Cropped: "' + imgPath + '" ' + image.width + ' x ' + image.height);
-                        deferred.resolve(image);
-                    }, function (err) {
-                        deferred.reject(err);
-                    });
-
-                    return deferred.promise;
-                }));
+                return cropImages.cropImagesFromDir(src + brand, dst + brand);
             }));
         });
 
-        it.skip("rename images", function (done) {
-            var imgPromises = _.map(productsHash, function (product) {
-
-                var originalFileName = 'dist/images/' + product.img.replace(/\//g, '_');
-
-                var originalExtension = path.extname(product.img);
-
-                var fileName = 'dist/site-images/' + product.title.replace(/\//g, '_') + '.' + (originalExtension || '.jpg');
-
-                return fileSystem.readOrCopy(fileName, originalFileName, product.ref);
-            });
-
-            Q.all(imgPromises).then(function () {
-                done();
-            }, function (err) {
-                done(err);
-            }).catch(function (err) {
-                done(err);
-            });
-        });
-
         it("import images to CSV", function (done) {
-            fileSystem.readFile('dist/json/products.json').then(function (productsString) {
+            var prefix = 'http://korann.host.webasyst.com/wa-data/public/site/images/';
+
+            fileSystem.readFile(productsHashFileName).then(function (productsString) {
                 var productsHash = JSON.parse(productsString);
-                var prefix = 'http://korann.host.webasyst.com/wa-data/public/site/images/';
 
                 var json2csv = require('json2csv');
 
@@ -497,7 +421,7 @@ describe("Parsing site... ", function () {
 
         it("set vendor codes", function (done) {
 
-            return fileSystem.readFile('dist/json/products.json').then(function (productsString) {
+            return fileSystem.readFile(productsHashFileName).then(function (productsString) {
                 var productsHash = JSON.parse(productsString);
 
                 var json2csv = require('json2csv');
@@ -529,105 +453,6 @@ describe("Parsing site... ", function () {
             });
         });
 
-    });
-
-});
-
-describe.skip('Loading image test', function () {
-
-    before("create images dir", function () {
-        return fileSystem.makeDir('dist/images');
-    });
-
-    var testImageUrl = 'http://www.mkora.ru/wa-data/public/shop/products/86/06/686/images/1331/1331.970.jpg';
-
-    var originalFileName = 'dist/images/test.jpg';
-
-    var copyFileName = 'dist/images/test_copy.jpg';
-
-    // disabled test
-    it('should download image', function (done) {
-        _downloadAndSave(testImageUrl, originalFileName, function (err) {
-            if (err) return done(err);
-
-            console.log('very good!');
-            done();
-        });
-    });
-
-    it("should copy image", function (done) {
-        fileSystem.readOrCopy(copyFileName, originalFileName, copyFileName).then(function (err) {
-            if (err) return done(err);
-
-            console.log("Copied successfully.");
-            done();
-        });
-    });
-
-    it.skip("should crop image", function (done) {
-        var easyImage = require('easyimage');
-
-        var croppedFileName = 'dist/images/test_copy_crop.jpg';
-
-        easyImage.crop({
-            src: copyFileName,
-            dst: croppedFileName,
-            width: 647,
-            height: 970,
-            cropheight: 770,
-            cropwidth: 647,
-            //quality: 1,
-            gravity: "South"
-        }).then(function (image) {
-            done();
-            console.log('Cropped: ' + image.width + ' x ' + image.height);
-        }, function (err) {
-            //console.log(err);
-            done(err);
-        });
-    });
-
-    it.skip("should crop all files from directory", function (done) {
-        var dir = 'dist/images';
-        var images = fs.readdirSync(dir);
-
-        var easyImage = require('easyimage');
-
-        Q.all(_.map(images, function (imgPath) {
-
-            var fileName = dir + '/' + imgPath;
-            var croppedFileName =
-                dir + '/'
-                + path.basename(imgPath, path.extname(imgPath))
-                + '_crop' + path.extname(imgPath);
-
-            console.log("imgPath: " + imgPath);
-            console.log("copyFileName: " + fileName);
-            console.log("croppedFileName: " + croppedFileName);
-
-            var deferred = Q.defer();
-
-            easyImage.crop({
-                src: fileName,
-                dst: croppedFileName,
-                width: 647,
-                height: 970,
-                cropheight: 770,
-                cropwidth: 647,
-                gravity: "South"
-            }).then(function (image) {
-                console.log('Cropped: ' + image.width + ' x ' + image.height);
-                deferred.resolve(image);
-            }, function (err) {
-                deferred.reject(err);
-            });
-
-            return deferred.promise;
-        })).then(function () {
-            done();
-        }, function (err) {
-            done(err);
-        })
     });
 
 });
@@ -715,27 +540,4 @@ function _getRequestPromise(ref) {
     timer += defaultTimeout;
 
     return deferred.promise;
-}
-
-function _downloadAndSave(uri, fileName, callback) {
-    request.head(uri, function (err, res) {
-        if (err) return callback(err);
-
-        //console.log('content-type:', res.headers['content-type']);
-        //console.log('content-length:', res.headers['content-length']);
-
-        request(uri).pipe(fs.createWriteStream(fileName)).on('close', callback);
-    });
-}
-
-function _readOrDownloadAndSave(uri, fileName, callback) {
-    try {
-        fs.accessSync(fileName);
-        return fileSystem.readFile(fileName).then(function (res) {
-            callback(null, res);
-        }, callback);
-    }
-    catch (e) {
-        _downloadAndSave('http://' + config.site + uri, fileName, callback);
-    }
 }
