@@ -49,7 +49,35 @@ function _parse(product) {
 
     product.description = _.trim($shortDescription.text());
 
-    var detailsHtml = entities.decodeHTML($('#product-description .hideCont').html());
+    _setDetailsInfo(product, $);
+
+    var skinText = $('#product-features tr td[itemprop="tip_kozhi"]').text();
+
+    product.skin = _.map(_.filter(_.split(skinText, ',')), function (skinType) {
+        var type = _.trim(skinType);
+        if (mappings.skinTypes[type]) {
+            return mappings.skinTypes[type];
+        }
+        return type;
+    });
+
+    product.volume = _.trim($('#product-features tr td[itemprop="obem"]').text());
+
+    if (!product.volume) {
+        product.volume = _.trim($('#product-features tr td[itemprop="obem_1"]').text());
+    }
+
+    product.country = _.trim($('#product-features tr td[itemprop="strana_proizvoditel_"]').text());
+
+    _setCategoriesAndTypes(product);
+
+    delete product.page;
+
+    return product;
+}
+
+function _setDetailsInfo(product, node) {
+    var detailsHtml = entities.decodeHTML(node('#product-description .hideCont').html());
 
     var details = _.split(detailsHtml, '<br><br>');
 
@@ -88,25 +116,9 @@ function _parse(product) {
 
         product[pattern] = _.trim(cheerio.load(product[pattern]).root().text());
     });
+}
 
-    var skinText = $('#product-features tr td[itemprop="tip_kozhi"]').text();
-
-    product.skin = _.map(_.filter(_.split(skinText, ',')), function (skinType) {
-        var type = _.trim(skinType);
-        if (mappings.skinTypes[type]) {
-            return mappings.skinTypes[type];
-        }
-        return type;
-    });
-
-    product.volume = _.trim($('#product-features tr td[itemprop="obem"]').text());
-
-    if (!product.volume) {
-        product.volume = _.trim($('#product-features tr td[itemprop="obem_1"]').text());
-    }
-
-    product.country = _.trim($('#product-features tr td[itemprop="strana_proizvoditel_"]').text());
-
+function _setCategoriesAndTypes(product) {
     var catMappingKey = _.find(product.categoryCodes, function (catCode) {
         return !_.isEmpty(categoryMappings[catCode]);
     });
@@ -124,8 +136,4 @@ function _parse(product) {
             product.types = _.union(product.types, type);
         });
     }
-
-    delete product.page;
-
-    return product;
 }
