@@ -20,7 +20,7 @@ var configuration = require('../modules/settings/configuration');
 var mappings = require('../modules/mappings/mappings');
 
 var site = "www.mkora.ru";
-var mainFile = "main.html"
+var mainFile = "main.html";
 
 console.log('Site to parse: ', site);
 
@@ -30,13 +30,11 @@ var mainPageParser = require('../modules/parsers/main-page.parser');
 
 describe("Parsing site... ", function () {
 
-    var $, context = {fileContent: null};
-
     var productsHashFileName = 'dist/json/products.json';
 
-    before("read file '" + 'dist/' + mainFile + "' if exist", function (done) {
+    before("read file '" + 'dist/' + mainFile + "' if exist", function () {
 
-        fileSystem.makeDir('dist').then(function () {
+        return fileSystem.makeDir('dist').then(function () {
             return Q.all([
                 fileSystem.makeDir('dist/categories'),
                 fileSystem.makeDir('dist/images'),
@@ -50,44 +48,46 @@ describe("Parsing site... ", function () {
                     ]);
                 })
             ]);
-        }).then(function () {
-            fileSystem.readFile('dist/' + mainFile).then(function (data) {
-                context.fileContent = data;
-                done();
-            }, function () {
-                done();
-            });
         });
     });
 
     describe.skip("Parse page for categories", function () {
 
-        it('respond with whole page', function (done) {
-            if (context.fileContent) {
-                $ = mainPageParser.parse(context.fileContent);
-                return done();
-            }
+        var $;
 
-            console.log("Main html file does not exist. Need to download.");
+        before('get main page', function () {
 
-            _prepareRequest(loader.get('/'))
-                .expect(200)
-                .end(function (err, res) {
-                    if (err) return done(err);
+            var contentPromise = fileSystem.readFile('dist/' + mainFile);
 
-                    var fileName = 'dist/' + mainFile;
+            return contentPromise.then(function (data) {
+                $ = mainPageParser.parse(data);
+            }, function () {
+                console.log("Main html file does not exist. Need to download.");
 
-                    fileSystem.writeFile(fileName, res.text).then(function () {
-                        $ = mainPageParser.parse(res.text);
+                var deferred = Q.defer();
 
-                        assert.notEqual($, null);
-                        assert.notEqual($, undefined);
+                _prepareRequest(loader.get('/'))
+                    .expect(200)
+                    .end(function (err, res) {
+                        if (err) return deferred.reject(err);
 
-                        done();
-                    }, function (err) {
-                        done(err);
+                        var fileName = 'dist/' + mainFile;
+
+                        fileSystem.writeFile(fileName, res.text).then(function () {
+                            $ = mainPageParser.parse(res.text);
+
+                            assert.notEqual($, null);
+                            assert.notEqual($, undefined);
+
+                            deferred.resolve($);
+                        }, function (err) {
+                            deferred.reject(err);
+                        });
                     });
-                });
+
+                return deferred.promise;
+            });
+
         });
 
         it('html should successfully parsed as cheerio object', function (done) {
