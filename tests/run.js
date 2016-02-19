@@ -9,15 +9,10 @@ var request = require('request');
 var path = require('path');
 
 var assert = chai.assert;
-var should = chai.should();
 var expect = chai.expect;
 
 var urlUtils = require('../modules/common/url');
 var fileSystem = require('../modules/common/fs');
-
-var productSearcher = require('../modules/parsers/product.searcher');
-var configuration = require('../modules/settings/configuration');
-var mappings = require('../modules/mappings/mappings');
 
 var site = "www.mkora.ru";
 var mainFile = "main.html";
@@ -152,6 +147,8 @@ describe("Parsing site... ", function () {
         describe("Parse products and save to json and CSV", function () {
 
             var productWriter = require('../modules/csv/product.writer');
+            var productSearcher = require('../modules/parsers/product.searcher');
+            var configuration = require('../modules/settings/configuration');
 
             it('should load all categories page', function (done) {
 
